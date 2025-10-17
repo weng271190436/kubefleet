@@ -37,6 +37,7 @@ import (
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/clusterinventory/clusterprofile"
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/clusterresourceplacementeviction"
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/clusterresourceplacementstatuswatcher"
+	"github.com/kubefleet-dev/kubefleet/pkg/controllers/memberclusterplacement"
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/overrider"
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/placement"
 	"github.com/kubefleet-dev/kubefleet/pkg/controllers/placementwatcher"
@@ -69,7 +70,8 @@ const (
 
 	resourceChangeControllerName = "resource-change-controller"
 
-	schedulerQueueName = "scheduler-queue"
+	schedulerQueueName        = "scheduler-queue"
+	mcPlacementControllerName = "memberCluster-placement-controller"
 )
 
 var (
@@ -174,6 +176,13 @@ func SetupControllers(ctx context.Context, wg *sync.WaitGroup, mgr ctrl.Manager,
 	var clusterResourcePlacementControllerV1Beta1 controller.Controller
 	var resourcePlacementController controller.Controller
 	var memberClusterPlacementController controller.Controller
+	if opts.EnableV1Alpha1APIs {
+		klog.Info("Setting up member cluster change controller")
+		mcp := &memberclusterplacement.Reconciler{
+			InformerManager: dynamicInformerManager,
+		}
+		memberClusterPlacementController = controller.NewController(mcPlacementControllerName, controller.NamespaceKeyFunc, mcp.Reconcile, rateLimiter)
+	}
 
 	if opts.EnableV1Beta1APIs {
 		for _, gvk := range v1Beta1RequiredGVKs {
