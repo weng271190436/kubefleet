@@ -37,7 +37,7 @@ import (
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils"
 	"github.com/kubefleet-dev/kubefleet/pkg/webhook/validation"
-	testutils "github.com/kubefleet-dev/kubefleet/test/e2e/v1alpha1/utils"
+	testutils "github.com/kubefleet-dev/kubefleet/test/utils"
 
 	fleetnetworkingv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 )

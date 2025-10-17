@@ -34,7 +34,7 @@ import (
 	clusterv1beta1 "github.com/kubefleet-dev/kubefleet/apis/cluster/v1beta1"
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils/defaulter"
-	testutils "github.com/kubefleet-dev/kubefleet/test/e2e/v1alpha1/utils"
+	testutils "github.com/kubefleet-dev/kubefleet/test/utils"
 )
 
 var _ = Describe("webhook tests for CRP CREATE operations", func() {
