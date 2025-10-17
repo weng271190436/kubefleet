@@ -171,7 +171,6 @@ func SetupControllers(ctx context.Context, wg *sync.WaitGroup, mgr ctrl.Manager,
 	}
 
 	rateLimiter := options.DefaultControllerRateLimiter(opts.RateLimiterOpts)
-	var clusterResourcePlacementControllerV1Alpha1 controller.Controller
 	var clusterResourcePlacementControllerV1Beta1 controller.Controller
 	var resourcePlacementController controller.Controller
 	var memberClusterPlacementController controller.Controller
@@ -492,7 +491,6 @@ func SetupControllers(ctx context.Context, wg *sync.WaitGroup, mgr ctrl.Manager,
 		Recorder:                    mgr.GetEventRecorderFor(resourceChangeControllerName),
 		RestMapper:                  mgr.GetRESTMapper(),
 		InformerManager:             dynamicInformerManager,
-		PlacementControllerV1Alpha1: clusterResourcePlacementControllerV1Alpha1,
 		PlacementControllerV1Beta1:  clusterResourcePlacementControllerV1Beta1,
 		ResourcePlacementController: resourcePlacementController,
 	}
@@ -502,16 +500,15 @@ func SetupControllers(ctx context.Context, wg *sync.WaitGroup, mgr ctrl.Manager,
 	resourceChangeDetector := &resourcewatcher.ChangeDetector{
 		DiscoveryClient: discoverClient,
 		RESTMapper:      mgr.GetRESTMapper(),
-		ClusterResourcePlacementControllerV1Alpha1: clusterResourcePlacementControllerV1Alpha1,
-		ClusterResourcePlacementControllerV1Beta1:  clusterResourcePlacementControllerV1Beta1,
-		ResourcePlacementController:                resourcePlacementController,
-		ResourceChangeController:                   resourceChangeController,
-		MemberClusterPlacementController:           memberClusterPlacementController,
-		InformerManager:                            dynamicInformerManager,
-		ResourceConfig:                             resourceConfig,
-		SkippedNamespaces:                          skippedNamespaces,
-		ConcurrentPlacementWorker:                  int(math.Ceil(float64(opts.MaxConcurrentClusterPlacement) / 10)),
-		ConcurrentResourceChangeWorker:             opts.ConcurrentResourceChangeSyncs,
+		ClusterResourcePlacementControllerV1Beta1: clusterResourcePlacementControllerV1Beta1,
+		ResourcePlacementController:               resourcePlacementController,
+		ResourceChangeController:                  resourceChangeController,
+		MemberClusterPlacementController:          memberClusterPlacementController,
+		InformerManager:                           dynamicInformerManager,
+		ResourceConfig:                            resourceConfig,
+		SkippedNamespaces:                         skippedNamespaces,
+		ConcurrentPlacementWorker:                 int(math.Ceil(float64(opts.MaxConcurrentClusterPlacement) / 10)),
+		ConcurrentResourceChangeWorker:            opts.ConcurrentResourceChangeSyncs,
 	}
 
 	if err := mgr.Add(resourceChangeDetector); err != nil {

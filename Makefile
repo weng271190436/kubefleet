@@ -175,8 +175,7 @@ integration-test: $(ENVTEST) ## Run tests.
 	export CGO_ENABLED=1 && \
 	export KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" && \
 	ginkgo -v -p --race --cover --coverpkg=./pkg/scheduler/... ./test/scheduler && \
-	ginkgo -v -p --race --cover --coverpkg=./... ./test/apis/... && \
-	go test ./test/integration/... -coverpkg=./...  -race -coverprofile=it-coverage.xml -v
+	ginkgo -v -p --race --cover --coverpkg=./... ./test/apis/... -coverprofile=it-coverage.xml
 
 ## local tests & e2e tests
 
@@ -223,20 +222,11 @@ install-member-agent-helm: install-hub-agent-helm e2e-v1alpha1-hub-kubeconfig-se
 	# to make sure member-agent reads the token file.
 	kubectl delete pod --all -n fleet-system
 
-build-e2e-v1alpha1:
-	go test -c ./test/e2e/v1alpha1
-
-run-e2e-v1alpha1: build-e2e-v1alpha1
-	KUBECONFIG=$(KUBECONFIG) HUB_SERVER_URL="https://$$(docker inspect $(HUB_KIND_CLUSTER_NAME)-control-plane --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):6443" ./v1alpha1.test -test.v -ginkgo.v
-
 .PHONY: create-kind-cluster
 create-kind-cluster: create-hub-kind-cluster create-member-kind-cluster install-helm
 
 .PHONY: install-helm
 install-helm:  load-hub-docker-image load-member-docker-image install-member-agent-helm
-
-.PHONY: e2e-tests-v1alpha1
-e2e-tests-v1alpha1: create-kind-cluster run-e2e-v1alpha1
 
 # E2E test label filter (can be overridden)
 LABEL_FILTER ?= !custom
@@ -394,11 +384,6 @@ clean-testing-resources:
 
 	kind export kubeconfig --name $(MEMBER_KIND_CLUSTER_NAME)
 	kubectl delete ns fleet-member-kind-member-testing --ignore-not-found
-
-.PHONY: clean-e2e-tests-v1alpha1
-clean-e2e-tests-v1alpha1:
-	kind delete cluster --name $(HUB_KIND_CLUSTER_NAME)
-	kind delete cluster --name $(MEMBER_KIND_CLUSTER_NAME)
 
 .PHONY: clean-e2e-tests
 clean-e2e-tests:
