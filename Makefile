@@ -161,9 +161,6 @@ integration-test: $(ENVTEST) ## Run tests.
 
 ## local tests & e2e tests
 
-.PHONY: install-helm
-install-helm:  load-hub-docker-image load-member-docker-image install-member-agent-helm
-
 # E2E test label filter (can be overridden)
 LABEL_FILTER ?= !custom
 
