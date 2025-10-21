@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	fleetv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,6 +90,14 @@ func TestHandleTombStoneObj(t *testing.T) {
 			},
 			wantErr: false,
 			want:    deletedRole,
+		},
+		{
+			name: "none runtime object should be error",
+			object: fleetv1beta1.ResourceIdentifier{
+				Namespace: "foo",
+				Name:      "bar",
+			},
+			wantErr: true,
 		},
 		{
 			name:    "nil object should be error",

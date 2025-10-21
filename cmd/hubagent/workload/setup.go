@@ -69,8 +69,7 @@ const (
 
 	resourceChangeControllerName = "resource-change-controller"
 
-	schedulerQueueName        = "scheduler-queue"
-	mcPlacementControllerName = "memberCluster-placement-controller"
+	schedulerQueueName = "scheduler-queue"
 )
 
 var (
