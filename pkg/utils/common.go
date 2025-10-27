@@ -345,6 +345,7 @@ var (
 		Resource: "storageclasses",
 	}
 
+	// TODO (weiweng): remove workv1alpha1 in next PR
 	WorkV1Alpha1MetaGVK = metav1.GroupVersionKind{
 		Group:   workv1alpha1.GroupVersion.Group,
 		Version: workv1alpha1.GroupVersion.Version,
