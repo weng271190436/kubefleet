@@ -186,7 +186,6 @@ func NewResourceConfig(isAllowList bool) *ResourceConfig {
 	if r.isAllowList {
 		return r
 	}
-	r.AddGroupVersionKind(WorkV1Alpha1GVK)
 
 	// disable cluster group by default
 	r.AddGroup(clusterv1beta1.GroupVersion.Group)
