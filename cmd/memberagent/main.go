@@ -357,7 +357,8 @@ func Start(ctx context.Context, hubCfg, memberConfig *rest.Config, hubOpts, memb
 
 	if *enableV1Alpha1APIs {
 		// TODO(weiweng): keeping v1alpha1 APIs for backward compatibility with helm charts. Remove soon.
-		klog.Info("v1alpha1 APIs are no longer supported")
+		klog.Error("v1alpha1 APIs are no longer supported. Please switch to v1beta1 APIs")
+		return errors.New("v1alpha1 APIs are no longer supported. Please switch to v1beta1 APIs")
 	}
 
 	if *enableV1Beta1APIs {
