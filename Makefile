@@ -140,7 +140,7 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet local-unit-test integration-test## Run tests.
 
 ##
-# Set up the timeout parameters as some of the test lengths have exceeded the default 10 minute mark.
+# Set up the timeout parameters as some of the tests (rollout controller) lengths have exceeded the default 10 minute mark.
 # TO-DO (chenyu1): enable parallelization for single package integration tests.
 .PHONY: local-unit-test
 local-unit-test: $(ENVTEST) ## Run tests.
