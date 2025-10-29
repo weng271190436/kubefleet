@@ -42,7 +42,7 @@ const (
 
 var (
 	// ValidationPath is the webhook service path which admission requests are routed to for validating v1beta1 RP resources.
-	ValidationPath = fmt.Sprintf(utils.ValidationPathFmt, placementv1beta1.GroupVersion.Group, placementv1beta1.GroupVersion.Version, "clusterresourceplacement")
+	ValidationPath = fmt.Sprintf(utils.ValidationPathFmt, placementv1beta1.GroupVersion.Group, placementv1beta1.GroupVersion.Version, "resourceplacement")
 )
 
 type resourcePlacementValidator struct {
