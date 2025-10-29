@@ -88,10 +88,10 @@ func (v *resourcePlacementValidator) Handle(_ context.Context, req admission.Req
 			}
 		}
 		if err := validator.ValidateResourcePlacement(&rp); err != nil {
-			klog.V(2).InfoS("v1beta1 cluster resource placement has invalid fields, request is denied", "operation", req.Operation, "namespacedName", types.NamespacedName{Name: rp.Name})
+			klog.V(2).InfoS("v1beta1 resource placement has invalid fields, request is denied", "operation", req.Operation, "namespacedName", types.NamespacedName{Name: rp.Name})
 			return admission.Denied(fmt.Sprintf(denyCreateUpdateInvalidRPFmt, err))
 		}
 	}
-	klog.V(2).InfoS("user is allowed to modify v1beta1 cluster resource placement", "operation", req.Operation, "user", req.UserInfo.Username, "group", req.UserInfo.Groups, "namespacedName", types.NamespacedName{Name: rp.Name})
+	klog.V(2).InfoS("user is allowed to modify v1beta1 resource placement", "operation", req.Operation, "user", req.UserInfo.Username, "group", req.UserInfo.Groups, "namespacedName", types.NamespacedName{Name: rp.Name})
 	return admission.Allowed("any user is allowed to modify v1beta1 RP")
 }
