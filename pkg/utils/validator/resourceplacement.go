@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package validator provides utils to validate cluster resource placement resource.
+// Package validator provides utils to validate both cluster resource placement and resource placement resource.
 package validator
 
 import (
@@ -53,15 +53,15 @@ var (
 	resourceCapacityTypes             = supportedResourceCapacityTypes()
 )
 
-// ValidateClusterResourcePlacement validates a ClusterResourcePlacement object.
-func ValidateClusterResourcePlacement(clusterResourcePlacement *placementv1beta1.ClusterResourcePlacement) error {
+// validatePlacement validates a placement object (either ClusterResourcePlacement or ResourcePlacement).
+func validatePlacement(name string, resourceSelectors []placementv1beta1.ResourceSelectorTerm, policy *placementv1beta1.PlacementPolicy, strategy placementv1beta1.RolloutStrategy, isClusterScoped bool) error {
 	allErr := make([]error, 0)
 
-	if len(clusterResourcePlacement.Name) > validation.DNS1035LabelMaxLength {
+	if len(name) > validation.DNS1035LabelMaxLength {
 		allErr = append(allErr, fmt.Errorf("the name field cannot have length exceeding %d", validation.DNS1035LabelMaxLength))
 	}
 
-	for _, selector := range clusterResourcePlacement.Spec.ResourceSelectors {
+	for _, selector := range resourceSelectors {
 		if selector.LabelSelector != nil {
 			if len(selector.Name) != 0 {
 				allErr = append(allErr, fmt.Errorf("the labelSelector and name fields are mutually exclusive in selector %+v", selector))
@@ -84,7 +84,8 @@ func ValidateClusterResourcePlacement(clusterResourcePlacement *placementv1beta1
 				Version: selector.Version,
 				Kind:    selector.Kind,
 			}
-			if !ResourceInformer.IsClusterScopedResources(gvk) {
+			// Only check cluster scope for ClusterResourcePlacement
+			if isClusterScoped && !ResourceInformer.IsClusterScopedResources(gvk) {
 				allErr = append(allErr, fmt.Errorf("the resource is not found in schema (please retry) or it is not a cluster scoped resource: %v", gvk))
 			}
 		} else {
@@ -94,17 +95,39 @@ func ValidateClusterResourcePlacement(clusterResourcePlacement *placementv1beta1
 		}
 	}
 
-	if clusterResourcePlacement.Spec.Policy != nil {
-		if err := validatePlacementPolicy(clusterResourcePlacement.Spec.Policy); err != nil {
+	if policy != nil {
+		if err := validatePlacementPolicy(policy); err != nil {
 			allErr = append(allErr, fmt.Errorf("the placement policy field is invalid: %w", err))
 		}
 	}
 
-	if err := validateRolloutStrategy(clusterResourcePlacement.Spec.Strategy); err != nil {
+	if err := validateRolloutStrategy(strategy); err != nil {
 		allErr = append(allErr, fmt.Errorf("the rollout Strategy field  is invalid: %w", err))
 	}
 
 	return apiErrors.NewAggregate(allErr)
+}
+
+// ValidateClusterResourcePlacement validates a ClusterResourcePlacement object.
+func ValidateClusterResourcePlacement(clusterResourcePlacement *placementv1beta1.ClusterResourcePlacement) error {
+	return validatePlacement(
+		clusterResourcePlacement.Name,
+		clusterResourcePlacement.Spec.ResourceSelectors,
+		clusterResourcePlacement.Spec.Policy,
+		clusterResourcePlacement.Spec.Strategy,
+		true, // isClusterScoped
+	)
+}
+
+// ValidateResourcePlacement validates a ResourcePlacement object.
+func ValidateResourcePlacement(resourcePlacement *placementv1beta1.ResourcePlacement) error {
+	return validatePlacement(
+		resourcePlacement.Name,
+		resourcePlacement.Spec.ResourceSelectors,
+		resourcePlacement.Spec.Policy,
+		resourcePlacement.Spec.Strategy,
+		false, // isClusterScoped
+	)
 }
 
 func IsPlacementPolicyTypeUpdated(oldPolicy, currentPolicy *placementv1beta1.PlacementPolicy) bool {
