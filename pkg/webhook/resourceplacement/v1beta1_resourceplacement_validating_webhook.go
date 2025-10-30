@@ -54,19 +54,19 @@ func (v *resourcePlacementValidator) Handle(ctx context.Context, req admission.R
 		v.decoder,
 		"RP",
 		// decodeFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error) {
 			var rp placementv1beta1.ResourcePlacement
 			err := decoder.Decode(req, &rp)
 			return &rp, err
 		},
 		// decodeOldFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error) {
 			var oldRP placementv1beta1.ResourcePlacement
 			err := decoder.DecodeRaw(req.OldObject, &oldRP)
 			return &oldRP, err
 		},
 		// validateFunc
-		func(obj validator.ResourcePlacementObject) error {
+		func(obj placementv1beta1.PlacementObj) error {
 			return validator.ValidateResourcePlacement(obj.(*placementv1beta1.ResourcePlacement))
 		},
 	)

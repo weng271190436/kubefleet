@@ -51,19 +51,19 @@ func (v *clusterResourcePlacementValidator) Handle(ctx context.Context, req admi
 	return validator.HandlePlacementValidation(ctx, req, v.decoder,
 		"CRP",
 		// decodeFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error) {
 			var crp placementv1beta1.ClusterResourcePlacement
 			err := decoder.Decode(req, &crp)
 			return &crp, err
 		},
 		// decodeOldFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error) {
 			var oldCRP placementv1beta1.ClusterResourcePlacement
 			err := decoder.DecodeRaw(req.OldObject, &oldCRP)
 			return &oldCRP, err
 		},
 		// validateFunc
-		func(obj validator.ResourcePlacementObject) error {
+		func(obj placementv1beta1.PlacementObj) error {
 			return validator.ValidateClusterResourcePlacement(obj.(*placementv1beta1.ClusterResourcePlacement))
 		})
 }

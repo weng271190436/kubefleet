@@ -550,12 +550,6 @@ func supportedResourceCapacityTypes() []string {
 	return capacityTypes
 }
 
-type ResourcePlacementObject interface {
-	GetPlacementSpec() *placementv1beta1.PlacementSpec
-	GetName() string
-	GetDeletionTimestamp() *metav1.Time
-}
-
 // HandlePlacementValidation provides consolidated webhook validation logic for placement objects.
 // This function accepts higher-order functions for type-specific operations.
 func HandlePlacementValidation(
@@ -563,9 +557,9 @@ func HandlePlacementValidation(
 	req admission.Request,
 	decoder webhook.AdmissionDecoder,
 	resourceType string,
-	decodeFunc func(admission.Request, webhook.AdmissionDecoder) (ResourcePlacementObject, error),
-	decodeOldFunc func(admission.Request, webhook.AdmissionDecoder) (ResourcePlacementObject, error),
-	validateFunc func(ResourcePlacementObject) error,
+	decodeFunc func(admission.Request, webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error),
+	decodeOldFunc func(admission.Request, webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error),
+	validateFunc func(placementv1beta1.PlacementObj) error,
 ) admission.Response {
 	if req.Operation == admissionv1.Create || req.Operation == admissionv1.Update {
 		klog.V(2).InfoS("handling placement", "resourceType", resourceType, "operation", req.Operation, "namespacedName", types.NamespacedName{Name: req.Name, Namespace: req.Namespace})
