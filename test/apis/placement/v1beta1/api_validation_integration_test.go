@@ -156,7 +156,7 @@ var _ = Describe("Test placement v1beta1 API validation", func() {
 			err := hubClient.Update(ctx, &crp)
 			var statusErr *k8sErrors.StatusError
 			Expect(errors.As(err, &statusErr)).To(BeTrue(), fmt.Sprintf("Update CRP call produced error %s. Error type wanted is %s.", reflect.TypeOf(err), reflect.TypeOf(&k8sErrors.StatusError{})))
-			Expect(statusErr.ErrStatus.Message).Should(MatchRegexp("placement type is immutable"))
+			Expect(statusErr.ErrStatus.Message).Should(MatchRegexp("policy is immutable"))
 		})
 
 		It("should deny update of ClusterResourcePlacement with different placement type", func() {
@@ -650,7 +650,7 @@ var _ = Describe("Test placement v1beta1 API validation", func() {
 			err := hubClient.Update(ctx, &rp)
 			var statusErr *k8sErrors.StatusError
 			Expect(errors.As(err, &statusErr)).To(BeTrue(), fmt.Sprintf("Update RP call produced error %s. Error type wanted is %s.", reflect.TypeOf(err), reflect.TypeOf(&k8sErrors.StatusError{})))
-			Expect(statusErr.ErrStatus.Message).Should(MatchRegexp("placement type is immutable"))
+			Expect(statusErr.ErrStatus.Message).Should(MatchRegexp("policy is immutable"))
 		})
 
 		It("should deny update of ResourcePlacement with different placement type", func() {
