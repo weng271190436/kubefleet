@@ -18,20 +18,26 @@ limitations under the License.
 package validator
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	apiErrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
 	"github.com/kubefleet-dev/kubefleet/pkg/propertyprovider"
@@ -47,6 +53,12 @@ var (
 	invalidTolerationKeyErrFmt   = "invalid toleration key %+v: %s"
 	invalidTolerationValueErrFmt = "invalid toleration value %+v: %s"
 	uniqueTolerationErrFmt       = "toleration %+v already exists, tolerations must be unique"
+
+	// Webhook validation message format strings
+	AllowUpdateOldInvalidFmt   = "allow update on old invalid v1beta1 %s with DeletionTimestamp set"
+	DenyUpdateOldInvalidFmt    = "deny update on old invalid v1beta1 %s with DeletionTimestamp not set %s"
+	DenyCreateUpdateInvalidFmt = "deny create/update v1beta1 %s has invalid fields %s"
+	AllowModifyFmt             = "any user is allowed to modify v1beta1 %s"
 
 	// Below is the map of supported capacity types.
 	supportedResourceCapacityTypesMap = map[string]bool{propertyprovider.AllocatableCapacityName: true, propertyprovider.AvailableCapacityName: true, propertyprovider.TotalCapacityName: true}
@@ -535,4 +547,63 @@ func supportedResourceCapacityTypes() []string {
 	}
 	sort.Strings(capacityTypes)
 	return capacityTypes
+}
+
+// HandlePlacementValidation provides consolidated webhook validation logic for placement objects.
+// This function accepts higher-order functions for type-specific operations.
+func HandlePlacementValidation(
+	ctx context.Context,
+	req admission.Request,
+	decoder webhook.AdmissionDecoder,
+	resourceType string,
+	decodeFunc func(admission.Request, webhook.AdmissionDecoder) (interface{}, error),
+	decodeOldFunc func(admission.Request, webhook.AdmissionDecoder) (interface{}, error),
+	validateFunc func(interface{}) error,
+	getNameFunc func(interface{}) string,
+	getDeletionTimestampFunc func(interface{}) *metav1.Time,
+	getSpecFunc func(interface{}) *placementv1beta1.PlacementSpec,
+	getTolerationsFunc func(interface{}) []placementv1beta1.Toleration,
+) admission.Response {
+	if req.Operation == admissionv1.Create || req.Operation == admissionv1.Update {
+		klog.V(2).InfoS("handling placement", "resourceType", resourceType, "operation", req.Operation, "namespacedName", types.NamespacedName{Name: req.Name, Namespace: req.Namespace})
+
+		placement, err := decodeFunc(req, decoder)
+		if err != nil {
+			klog.ErrorS(err, "failed to decode v1beta1 placement object for create/update operation", "resourceType", resourceType, "userName", req.UserInfo.Username, "groups", req.UserInfo.Groups)
+			return admission.Errored(http.StatusBadRequest, err)
+		}
+
+		if req.Operation == admissionv1.Update {
+			oldPlacement, err := decodeOldFunc(req, decoder)
+			if err != nil {
+				return admission.Errored(http.StatusBadRequest, err)
+			}
+
+			// Special case: allow updates to old placement objects with invalid fields so that we can
+			// update the placement to remove finalizer then delete it.
+			if err := validateFunc(oldPlacement); err != nil {
+				if getDeletionTimestampFunc(placement) != nil {
+					return admission.Allowed(fmt.Sprintf(AllowUpdateOldInvalidFmt, resourceType))
+				}
+				return admission.Denied(fmt.Sprintf(DenyUpdateOldInvalidFmt, resourceType, err))
+			}
+
+			// Handle update case where placement type should be immutable.
+			if IsPlacementPolicyTypeUpdated(getSpecFunc(oldPlacement).Policy, getSpecFunc(placement).Policy) {
+				return admission.Denied("placement type is immutable")
+			}
+
+			// Handle update case where existing tolerations were updated/deleted
+			if IsTolerationsUpdatedOrDeleted(getTolerationsFunc(oldPlacement), getTolerationsFunc(placement)) {
+				return admission.Denied("tolerations have been updated/deleted, only additions to tolerations are allowed")
+			}
+		}
+
+		if err := validateFunc(placement); err != nil {
+			klog.V(2).InfoS("v1beta1 placement has invalid fields, request is denied", "resourceType", resourceType, "operation", req.Operation, "namespacedName", types.NamespacedName{Name: getNameFunc(placement), Namespace: req.Namespace})
+			return admission.Denied(fmt.Sprintf(DenyCreateUpdateInvalidFmt, resourceType, err))
+		}
+	}
+
+	return admission.Allowed(fmt.Sprintf(AllowModifyFmt, resourceType))
 }

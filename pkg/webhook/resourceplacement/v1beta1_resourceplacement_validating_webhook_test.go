@@ -27,16 +27,16 @@ import (
 
 var (
 	resourceSelector = placementv1beta1.ResourceSelectorTerm{
-		Group:   "rbac.authorization.k8s.io",
+		Group:   "",
 		Version: "v1",
-		Kind:    "ClusterRole",
+		Kind:    "ConfigMap",
 		Name:    "test-cluster-role",
 	}
 	errString = "the rollout Strategy field  is invalid: maxUnavailable must be greater than or equal to 0, got `-1`"
 )
 
 func TestHandle(t *testing.T) {
-	invalidRPObject := &placementv1beta1.ClusterResourcePlacement{
+	invalidRPObject := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-rp",
 			Finalizers: []string{placementv1beta1.PlacementCleanupFinalizer},
@@ -55,7 +55,7 @@ func TestHandle(t *testing.T) {
 		},
 	}
 
-	invalidRPObjectDeletingFinalizersRemoved := &placementv1beta1.ClusterResourcePlacement{
+	invalidRPObjectDeletingFinalizersRemoved := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-rp",
 			Finalizers:        []string{},
@@ -75,7 +75,7 @@ func TestHandle(t *testing.T) {
 		},
 	}
 
-	invalidRPObjectFinalizersRemoved := &placementv1beta1.ClusterResourcePlacement{
+	invalidRPObjectFinalizersRemoved := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-rp",
 			Finalizers: []string{},
@@ -94,7 +94,7 @@ func TestHandle(t *testing.T) {
 		},
 	}
 
-	validRPObject := &placementv1beta1.ClusterResourcePlacement{
+	validRPObject := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-rp",
 			Finalizers: []string{placementv1beta1.PlacementCleanupFinalizer},
@@ -110,7 +110,7 @@ func TestHandle(t *testing.T) {
 		},
 	}
 
-	validRPObjectWithTolerations := &placementv1beta1.ClusterResourcePlacement{
+	validRPObjectWithTolerations := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-rp",
 		},
@@ -131,7 +131,7 @@ func TestHandle(t *testing.T) {
 		},
 	}
 
-	updatedPlacementTypeRPObject := &placementv1beta1.ClusterResourcePlacement{
+	updatedPlacementTypeRPObject := &placementv1beta1.ResourcePlacement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-rp",
 		},
@@ -189,13 +189,13 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
 			},
-			wantResponse: admission.Allowed("any user is allowed to modify v1beta1 RP"),
+			wantResponse: admission.Allowed(fmt.Sprintf(validator.AllowModifyFmt, "RP")),
 		},
 		"deny RP create - invalid RP object": {
 			req: admission.Request{
@@ -214,13 +214,13 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
 			},
-			wantResponse: admission.Denied(fmt.Sprintf(denyCreateUpdateInvalidRPFmt, errString)),
+			wantResponse: admission.Denied(fmt.Sprintf(validator.DenyCreateUpdateInvalidFmt, "RP", errString)),
 		},
 		"allow RP update - invalid old RP object, invalid new RP is deleting, finalizer removed": {
 			req: admission.Request{
@@ -243,13 +243,13 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
 			},
-			wantResponse: admission.Allowed(allowUpdateOldInvalidRPFmt),
+			wantResponse: admission.Allowed(fmt.Sprintf(validator.AllowUpdateOldInvalidFmt, "RP")),
 		},
 		"deny RP update - invalid old RP, invalid new RP is not deleting, finalizer removed": {
 			req: admission.Request{
@@ -272,13 +272,13 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
 			},
-			wantResponse: admission.Denied(fmt.Sprintf(denyUpdateOldInvalidRPFmt, errString)),
+			wantResponse: admission.Denied(fmt.Sprintf(validator.DenyUpdateOldInvalidFmt, "RP", errString)),
 		},
 		"deny RP update - valid old RP, invalid new RP, spec updated": {
 			req: admission.Request{
@@ -301,13 +301,13 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
 			},
-			wantResponse: admission.Denied(fmt.Sprintf(denyCreateUpdateInvalidRPFmt, errString)),
+			wantResponse: admission.Denied(fmt.Sprintf(validator.DenyCreateUpdateInvalidFmt, "RP", errString)),
 		},
 		"deny RP update - new RP immutable placement type": {
 			req: admission.Request{
@@ -330,8 +330,8 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
@@ -359,8 +359,8 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
@@ -378,8 +378,8 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,
@@ -411,8 +411,8 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
-				IsClusterScopedResource: true,
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
 				decoder: decoder,

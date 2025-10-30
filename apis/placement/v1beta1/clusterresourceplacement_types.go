@@ -1595,6 +1595,16 @@ func (m *ClusterResourcePlacement) SetPlacementStatus(status PlacementStatus) {
 	status.DeepCopyInto(&m.Status)
 }
 
+// GetName returns the name of the ClusterResourcePlacement.
+func (m *ClusterResourcePlacement) GetName() string {
+	return m.ObjectMeta.Name
+}
+
+// GetDeletionTimestamp returns the deletion timestamp of the ClusterResourcePlacement.
+func (m *ClusterResourcePlacement) GetDeletionTimestamp() *metav1.Time {
+	return m.ObjectMeta.DeletionTimestamp
+}
+
 const (
 	// ResourcePlacementCleanupFinalizer is a finalizer added by the RP controller to all RPs, to make sure
 	// that the RP controller can react to RP deletions if necessary.
@@ -1683,6 +1693,16 @@ func (rpl *ResourcePlacementList) GetPlacementObjs() []PlacementObj {
 		objs[i] = &rpl.Items[i]
 	}
 	return objs
+}
+
+// GetName returns the name of the ResourcePlacement.
+func (m *ResourcePlacement) GetName() string {
+	return m.ObjectMeta.Name
+}
+
+// GetDeletionTimestamp returns the deletion timestamp of the ResourcePlacement.
+func (m *ResourcePlacement) GetDeletionTimestamp() *metav1.Time {
+	return m.ObjectMeta.DeletionTimestamp
 }
 
 // +genclient

@@ -20,11 +20,8 @@ package resourceplacement
 import (
 	"context"
 	"fmt"
-	"net/http"
 
-	admissionv1 "k8s.io/api/admission/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -32,12 +29,6 @@ import (
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils/validator"
-)
-
-const (
-	allowUpdateOldInvalidRPFmt   = "allow update on old invalid v1beta1 RP with DeletionTimestamp set"
-	denyUpdateOldInvalidRPFmt    = "deny update on old invalid v1beta1 RP with DeletionTimestamp not set %s"
-	denyCreateUpdateInvalidRPFmt = "deny create/update v1beta1 RP has invalid fields %s"
 )
 
 var (
@@ -57,41 +48,43 @@ func Add(mgr manager.Manager) error {
 }
 
 // Handle resourcePlacementValidator handles create, update RP requests.
-func (v *resourcePlacementValidator) Handle(_ context.Context, req admission.Request) admission.Response {
-	var rp placementv1beta1.ResourcePlacement
-	if req.Operation == admissionv1.Create || req.Operation == admissionv1.Update {
-		klog.V(2).InfoS("handling RP", "operation", req.Operation, "namespacedName", types.NamespacedName{Name: req.Name})
-		if err := v.decoder.Decode(req, &rp); err != nil {
-			klog.ErrorS(err, "failed to decode v1beta1 RP object for create/update operation", "userName", req.UserInfo.Username, "groups", req.UserInfo.Groups)
-			return admission.Errored(http.StatusBadRequest, err)
-		}
-		if req.Operation == admissionv1.Update {
+func (v *resourcePlacementValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
+	return validator.HandlePlacementValidation(
+		ctx,
+		req,
+		v.decoder,
+		"RP",
+		// decodeFunc
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
+			var rp placementv1beta1.ResourcePlacement
+			err := decoder.Decode(req, &rp)
+			return &rp, err
+		},
+		// decodeOldFunc
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
 			var oldRP placementv1beta1.ResourcePlacement
-			if err := v.decoder.DecodeRaw(req.OldObject, &oldRP); err != nil {
-				return admission.Errored(http.StatusBadRequest, err)
-			}
-			// this is a special case where we allow updates to old v1beta1 RP with invalid fields so that we can
-			// update the RP to remove finalizer then delete RP.
-			if err := validator.ValidateResourcePlacement(&oldRP); err != nil {
-				if rp.DeletionTimestamp != nil {
-					return admission.Allowed(allowUpdateOldInvalidRPFmt)
-				}
-				return admission.Denied(fmt.Sprintf(denyUpdateOldInvalidRPFmt, err))
-			}
-			// handle update case where placement type should be immutable.
-			if validator.IsPlacementPolicyTypeUpdated(oldRP.Spec.Policy, rp.Spec.Policy) {
-				return admission.Denied("placement type is immutable")
-			}
-			// handle update case where existing tolerations were updated/deleted
-			if validator.IsTolerationsUpdatedOrDeleted(oldRP.Spec.Tolerations(), rp.Spec.Tolerations()) {
-				return admission.Denied("tolerations have been updated/deleted, only additions to tolerations are allowed")
-			}
-		}
-		if err := validator.ValidateResourcePlacement(&rp); err != nil {
-			klog.V(2).InfoS("v1beta1 resource placement has invalid fields, request is denied", "operation", req.Operation, "namespacedName", types.NamespacedName{Name: rp.Name})
-			return admission.Denied(fmt.Sprintf(denyCreateUpdateInvalidRPFmt, err))
-		}
-	}
-	klog.V(2).InfoS("user is allowed to modify v1beta1 resource placement", "operation", req.Operation, "user", req.UserInfo.Username, "group", req.UserInfo.Groups, "namespacedName", types.NamespacedName{Name: rp.Name})
-	return admission.Allowed("any user is allowed to modify v1beta1 RP")
+			err := decoder.DecodeRaw(req.OldObject, &oldRP)
+			return &oldRP, err
+		},
+		// validateFunc
+		func(obj interface{}) error {
+			return validator.ValidateResourcePlacement(obj.(*placementv1beta1.ResourcePlacement))
+		},
+		// getNameFunc
+		func(obj interface{}) string {
+			return obj.(*placementv1beta1.ResourcePlacement).Name
+		},
+		// getDeletionTimestampFunc
+		func(obj interface{}) *metav1.Time {
+			return obj.(*placementv1beta1.ResourcePlacement).DeletionTimestamp
+		},
+		// getSpecFunc
+		func(obj interface{}) *placementv1beta1.PlacementSpec {
+			return &obj.(*placementv1beta1.ResourcePlacement).Spec
+		},
+		// getTolerationsFunc
+		func(obj interface{}) []placementv1beta1.Toleration {
+			return obj.(*placementv1beta1.ResourcePlacement).Spec.Tolerations()
+		},
+	)
 }
