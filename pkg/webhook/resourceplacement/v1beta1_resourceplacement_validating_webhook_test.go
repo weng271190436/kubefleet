@@ -27,10 +27,10 @@ import (
 
 var (
 	resourceSelector = placementv1beta1.ResourceSelectorTerm{
-		Group:   "",
+		Group:   "apps",
 		Version: "v1",
-		Kind:    "ConfigMap",
-		Name:    "test-cluster-role",
+		Kind:    "Deployment",
+		Name:    "test-deployment",
 	}
 	errString = "the rollout Strategy field  is invalid: maxUnavailable must be greater than or equal to 0, got `-1`"
 )
@@ -189,7 +189,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -214,7 +214,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -243,7 +243,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -272,7 +272,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -301,7 +301,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -330,7 +330,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -359,7 +359,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -378,7 +378,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{
@@ -411,7 +411,7 @@ func TestHandle(t *testing.T) {
 				},
 			},
 			resourceInformer: &testinformer.FakeManager{
-				APIResources:            map[schema.GroupVersionKind]bool{utils.ConfigMapGVK: true},
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
 				IsClusterScopedResource: false,
 			},
 			resourceValidator: resourcePlacementValidator{

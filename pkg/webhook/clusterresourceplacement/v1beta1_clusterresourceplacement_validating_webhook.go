@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -51,29 +50,20 @@ func Add(mgr manager.Manager) error {
 func (v *clusterResourcePlacementValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	return validator.HandlePlacementValidation(ctx, req, v.decoder,
 		"CRP",
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
+		// decodeFunc
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
 			var crp placementv1beta1.ClusterResourcePlacement
 			err := decoder.Decode(req, &crp)
 			return &crp, err
 		},
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
+		// decodeOldFunc
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
 			var oldCRP placementv1beta1.ClusterResourcePlacement
 			err := decoder.DecodeRaw(req.OldObject, &oldCRP)
 			return &oldCRP, err
 		},
-		func(placement interface{}) error {
-			return validator.ValidateClusterResourcePlacement(placement.(*placementv1beta1.ClusterResourcePlacement))
-		},
-		func(placement interface{}) string {
-			return placement.(*placementv1beta1.ClusterResourcePlacement).Name
-		},
-		func(placement interface{}) *metav1.Time {
-			return placement.(*placementv1beta1.ClusterResourcePlacement).DeletionTimestamp
-		},
-		func(placement interface{}) *placementv1beta1.PlacementSpec {
-			return &placement.(*placementv1beta1.ClusterResourcePlacement).Spec
-		},
-		func(placement interface{}) []placementv1beta1.Toleration {
-			return placement.(*placementv1beta1.ClusterResourcePlacement).Spec.Tolerations()
+		// validateFunc
+		func(obj validator.ResourcePlacementObject) error {
+			return validator.ValidateClusterResourcePlacement(obj.(*placementv1beta1.ClusterResourcePlacement))
 		})
 }

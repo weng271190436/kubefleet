@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -55,36 +54,20 @@ func (v *resourcePlacementValidator) Handle(ctx context.Context, req admission.R
 		v.decoder,
 		"RP",
 		// decodeFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
 			var rp placementv1beta1.ResourcePlacement
 			err := decoder.Decode(req, &rp)
 			return &rp, err
 		},
 		// decodeOldFunc
-		func(req admission.Request, decoder webhook.AdmissionDecoder) (interface{}, error) {
+		func(req admission.Request, decoder webhook.AdmissionDecoder) (validator.ResourcePlacementObject, error) {
 			var oldRP placementv1beta1.ResourcePlacement
 			err := decoder.DecodeRaw(req.OldObject, &oldRP)
 			return &oldRP, err
 		},
 		// validateFunc
-		func(obj interface{}) error {
+		func(obj validator.ResourcePlacementObject) error {
 			return validator.ValidateResourcePlacement(obj.(*placementv1beta1.ResourcePlacement))
-		},
-		// getNameFunc
-		func(obj interface{}) string {
-			return obj.(*placementv1beta1.ResourcePlacement).Name
-		},
-		// getDeletionTimestampFunc
-		func(obj interface{}) *metav1.Time {
-			return obj.(*placementv1beta1.ResourcePlacement).DeletionTimestamp
-		},
-		// getSpecFunc
-		func(obj interface{}) *placementv1beta1.PlacementSpec {
-			return &obj.(*placementv1beta1.ResourcePlacement).Spec
-		},
-		// getTolerationsFunc
-		func(obj interface{}) []placementv1beta1.Toleration {
-			return obj.(*placementv1beta1.ResourcePlacement).Spec.Tolerations()
 		},
 	)
 }
