@@ -101,6 +101,7 @@ func validatePlacement(name string, resourceSelectors []placementv1beta1.Resourc
 				allErr = append(allErr, fmt.Errorf("the resource is not found in schema (please retry) or it is not a cluster scoped resource: %v", gvk))
 			}
 
+			// Only check namespace scope for ResourcePlacement
 			if !isClusterScoped && ResourceInformer.IsClusterScopedResources(gvk) {
 				allErr = append(allErr, fmt.Errorf("the resource is not found in schema (please retry) or it is a cluster scoped resource: %v", gvk))
 			}
