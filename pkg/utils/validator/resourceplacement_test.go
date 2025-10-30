@@ -167,6 +167,29 @@ func TestValidateClusterResourcePlacement(t *testing.T) {
 			wantErr:          true,
 			wantErrMsg:       "cannot perform resource scope check for now, please retry",
 		},
+		"CRP with namespaced resource should fail": {
+			crp: &placementv1beta1.ClusterResourcePlacement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-crp",
+				},
+				Spec: placementv1beta1.PlacementSpec{
+					ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{
+						{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "Deployment",
+							Name:    "test-deployment",
+						},
+					},
+				},
+			},
+			resourceInformer: &testinformer.FakeManager{
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
+				IsClusterScopedResource: false, // Deployment is namespaced
+			},
+			wantErr:    true,
+			wantErrMsg: "resource is not found in schema (please retry) or it is not a cluster scoped resource",
+		},
 	}
 	for testName, testCase := range tests {
 		t.Run(testName, func(t *testing.T) {
@@ -1782,6 +1805,53 @@ func TestValidateResourcePlacement(t *testing.T) {
 			},
 			wantErr:    true,
 			wantErrMsg: "maxUnavailable must be greater than or equal to 0",
+		},
+		"RP with cluster scoped resource should fail": {
+			rp: &placementv1beta1.ResourcePlacement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rp",
+					Namespace: "test-namespace",
+				},
+				Spec: placementv1beta1.PlacementSpec{
+					ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{
+						{
+							Group:   "rbac.authorization.k8s.io",
+							Version: "v1",
+							Kind:    "ClusterRole",
+							Name:    "test-cluster-role",
+						},
+					},
+				},
+			},
+			resourceInformer: &testinformer.FakeManager{
+				APIResources:            map[schema.GroupVersionKind]bool{utils.ClusterRoleGVK: true},
+				IsClusterScopedResource: true, // ClusterRole is cluster-scoped
+			},
+			wantErr:    true,
+			wantErrMsg: "resource is not found in schema (please retry) or it is a cluster scoped resource",
+		},
+		"RP with namespaced resource should succeed": {
+			rp: &placementv1beta1.ResourcePlacement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-rp",
+					Namespace: "test-namespace",
+				},
+				Spec: placementv1beta1.PlacementSpec{
+					ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{
+						{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "Deployment",
+							Name:    "test-deployment",
+						},
+					},
+				},
+			},
+			resourceInformer: &testinformer.FakeManager{
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
+				IsClusterScopedResource: false, // Deployment is namespaced
+			},
+			wantErr: false,
 		},
 	}
 
