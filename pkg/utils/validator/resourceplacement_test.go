@@ -1719,3 +1719,83 @@ func TestIsTolerationsUpdatedOrDeleted(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateResourcePlacement(t *testing.T) {
+	tests := map[string]struct {
+		rp               *placementv1beta1.ResourcePlacement
+		resourceInformer informer.Manager
+		wantErr          bool
+		wantErrMsg       string
+	}{
+		"RP with invalid placement policy": {
+			rp: &placementv1beta1.ResourcePlacement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-rp",
+				},
+				Spec: placementv1beta1.PlacementSpec{
+					ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{
+						{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "Deployment",
+							Name:    "test-deployment",
+						},
+					},
+					Policy: &placementv1beta1.PlacementPolicy{
+						PlacementType: placementv1beta1.PickFixedPlacementType,
+						ClusterNames:  []string{}, // Empty cluster names for PickFixed type
+					},
+				},
+			},
+			resourceInformer: &testinformer.FakeManager{
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
+				IsClusterScopedResource: false,
+			},
+			wantErr:    true,
+			wantErrMsg: "cluster names cannot be empty for policy type PickFixed",
+		},
+		"RP with invalid rollout strategy": {
+			rp: &placementv1beta1.ResourcePlacement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-rp",
+				},
+				Spec: placementv1beta1.PlacementSpec{
+					ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{
+						{
+							Group:   "apps",
+							Version: "v1",
+							Kind:    "Deployment",
+							Name:    "test-deployment",
+						},
+					},
+					Strategy: placementv1beta1.RolloutStrategy{
+						Type: placementv1beta1.RollingUpdateRolloutStrategyType,
+						RollingUpdate: &placementv1beta1.RollingUpdateConfig{
+							MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: -1}, // Negative value
+						},
+					},
+				},
+			},
+			resourceInformer: &testinformer.FakeManager{
+				APIResources:            map[schema.GroupVersionKind]bool{utils.DeploymentGVK: true},
+				IsClusterScopedResource: false,
+			},
+			wantErr:    true,
+			wantErrMsg: "maxUnavailable must be greater than or equal to 0",
+		},
+	}
+
+	for testName, testCase := range tests {
+		t.Run(testName, func(t *testing.T) {
+			RestMapper = utils.TestMapper{}
+			ResourceInformer = testCase.resourceInformer
+			gotErr := ValidateResourcePlacement(testCase.rp)
+			if (gotErr != nil) != testCase.wantErr {
+				t.Errorf("ValidateResourcePlacement() error = %v, wantErr %v", gotErr, testCase.wantErr)
+			}
+			if testCase.wantErr && !strings.Contains(gotErr.Error(), testCase.wantErrMsg) {
+				t.Errorf("ValidateResourcePlacement() got %v, should contain want %s", gotErr, testCase.wantErrMsg)
+			}
+		})
+	}
+}
