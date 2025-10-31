@@ -2063,9 +2063,8 @@ spec:
             - resourceSelectors
             type: object
             x-kubernetes-validations:
-            - message: policy is immutable
-              rule: '!((has(oldSelf.policy) && !has(self.policy)) || (has(oldSelf.policy)
-                && has(self.policy)))'
+            - message: policy cannot be removed once set
+              rule: '!(has(oldSelf.policy) && !has(self.policy))'
             - message: when statusReportingScope is NamespaceAccessible, exactly one
                 resourceSelector with kind 'Namespace' is required
               rule: '!(self.statusReportingScope == ''NamespaceAccessible'' && size(self.resourceSelectors.filter(x,
