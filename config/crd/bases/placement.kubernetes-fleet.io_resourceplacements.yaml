@@ -998,9 +998,8 @@ spec:
             - resourceSelectors
             type: object
             x-kubernetes-validations:
-            - message: policy is immutable
-              rule: '!((has(oldSelf.policy) && !has(self.policy)) || (has(oldSelf.policy)
-                && has(self.policy)))'
+            - message: policy cannot be removed once set
+              rule: '!(has(oldSelf.policy) && !has(self.policy))'
           status:
             description: The observed status of ResourcePlacement.
             properties:
