@@ -217,3 +217,6 @@ mkdir -p ../../hack/tools/bin
 # Build fleet plugin binary
 echo "Building fleet kubectl-plugin binary..."
 go build -o ../../hack/tools/bin/kubectl-fleet ../../tools/fleet
+
+echo "=== Final disk usage after e2e setup completion ==="
+df -h
