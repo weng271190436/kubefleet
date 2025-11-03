@@ -135,7 +135,7 @@ type PlacementSpec struct {
 	// Policy defines how to select member clusters to place the selected resources.
 	// If unspecified, all the joined member clusters are selected.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:XValidation:rule="!(has(self.placementType) && has(oldSelf.placementType) && self.placementType != oldSelf.placementType)",message="placement type is immutable"
+	// +kubebuilder:validation:XValidation:rule="!(self.placementType != oldSelf.placementType)",message="placement type is immutable"
 	Policy *PlacementPolicy `json:"policy,omitempty"`
 
 	// The rollout strategy to use to replace existing placement with new ones.

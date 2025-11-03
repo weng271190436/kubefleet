@@ -520,8 +520,7 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: placement type is immutable
-                  rule: '!(has(self.placementType) && has(oldSelf.placementType) &&
-                    self.placementType != oldSelf.placementType)'
+                  rule: '!(self.placementType != oldSelf.placementType)'
               resourceSelectors:
                 description: |-
                   ResourceSelectors is an array of selectors used to select cluster scoped resources. The selectors are `ORed`.
