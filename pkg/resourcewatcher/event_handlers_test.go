@@ -136,3 +136,145 @@ func (t *fakeController) Run(_ context.Context, _ int) error {
 	//TODO implement me
 	panic("implement me")
 }
+
+func TestOnResourceUpdated(t *testing.T) {
+	tests := []struct {
+		name         string
+		oldObj       interface{}
+		newObj       interface{}
+		wantEnqueued bool
+		description  string
+	}{
+		{
+			name: "generation changed - should enqueue",
+			oldObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "1",
+					Generation:      1,
+				},
+			},
+			newObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "2",
+					Generation:      2,
+				},
+			},
+			wantEnqueued: true,
+			description:  "Generation incremented (spec changed)",
+		},
+		{
+			name: "status-only update - should NOT enqueue",
+			oldObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "1",
+					Generation:      1,
+				},
+			},
+			newObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "2",
+					Generation:      1, // Same generation
+				},
+			},
+			wantEnqueued: false,
+			description:  "ResourceVersion changed but generation same (status-only update)",
+		},
+		{
+			name: "same resource version - should NOT enqueue",
+			oldObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "1",
+					Generation:      1,
+				},
+			},
+			newObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "1", // Same resource version
+					Generation:      1,
+				},
+			},
+			wantEnqueued: false,
+			description:  "No changes (same resource version)",
+		},
+		{
+			name: "generation 0 with changes - should enqueue",
+			oldObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "1",
+					Generation:      0,
+				},
+			},
+			newObj: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test-cm",
+					Namespace:       "default",
+					ResourceVersion: "2",
+					Generation:      0, // Generation 0 (resource doesn't track generation)
+				},
+			},
+			wantEnqueued: true,
+			description:  "Generation 0 - resource doesn't support generation field",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeCtrl := &fakeController{Enqueued: false}
+			detector := &ChangeDetector{
+				ResourceChangeController: fakeCtrl,
+			}
+
+			detector.onResourceUpdated(tt.oldObj, tt.newObj)
+
+			if fakeCtrl.Enqueued != tt.wantEnqueued {
+				t.Errorf("%s: got Enqueued = %v, want %v", tt.description, fakeCtrl.Enqueued, tt.wantEnqueued)
+			}
+		})
+	}
+}
