@@ -32,6 +32,7 @@ spec:
             {{- end }}
             - --v={{ .Values.logVerbosity }}
             - -add_dir_header
+            - --enable-v1alpha1-apis=false
             - --enable-v1beta1-apis={{ .Values.enableV1Beta1APIs }}
             - --enable-pprof={{ .Values.enablePprof }}
             - --pprof-port={{ .Values.pprofPort }}

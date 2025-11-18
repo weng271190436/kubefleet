@@ -1,6 +1,3 @@
-export SUBSCRIPTION_ID=d712bfad-d238-486f-8f1b-bf61a831b712
-export RESOURCE_GROUP=weiweng-bug-bash
-export LOCATION=westus2
 export HUB_CLUSTER=hub
 export MEMBER_CLUSTER_1=member-1
 export MEMBER_CLUSTER_2=member-2
