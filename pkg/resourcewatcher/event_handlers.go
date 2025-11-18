@@ -79,14 +79,28 @@ func (d *ChangeDetector) onResourceUpdated(oldObj, newObj interface{}) {
 		klog.ErrorS(fmt.Errorf("resource %+v is not a runtime object", oldObj), "skip process an unknown obj")
 		return
 	}
-	if oldObjMeta.GetResourceVersion() != newObjMeta.GetResourceVersion() {
-		klog.V(3).InfoS("A resource is updated", "obj", oldObjMeta.GetName(),
+
+	// Skip processing if resource version hasn't changed
+	if oldObjMeta.GetResourceVersion() == newObjMeta.GetResourceVersion() {
+		klog.V(4).InfoS("Received a resource updated event with no change", "obj", oldObjMeta.GetName(),
 			"namespace", oldObjMeta.GetNamespace(), "gvk", runtimeObject.GetObjectKind().GroupVersionKind().String())
-		d.ResourceChangeController.Enqueue(newObj)
 		return
 	}
-	klog.V(4).InfoS("Received a resource updated event with no change", "obj", oldObjMeta.GetName(),
-		"namespace", oldObjMeta.GetNamespace(), "gvk", runtimeObject.GetObjectKind().GroupVersionKind().String())
+
+	// Skip processing if only status changed (generation unchanged)
+	// Generation is incremented only when the desired state (e.g. spec or some metadata such as labels and annotations) changes
+	// See generation field doc: https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/object-meta
+	if oldObjMeta.GetGeneration() == newObjMeta.GetGeneration() && oldObjMeta.GetGeneration() != 0 {
+		klog.V(4).InfoS("Skipping status-only update", "obj", oldObjMeta.GetName(),
+			"namespace", oldObjMeta.GetNamespace(), "gvk", runtimeObject.GetObjectKind().GroupVersionKind().String(),
+			"generation", oldObjMeta.GetGeneration())
+		return
+	}
+
+	klog.V(3).InfoS("A resource is updated", "obj", oldObjMeta.GetName(),
+		"namespace", oldObjMeta.GetNamespace(), "gvk", runtimeObject.GetObjectKind().GroupVersionKind().String(),
+		"generation", newObjMeta.GetGeneration())
+	d.ResourceChangeController.Enqueue(newObj)
 }
 
 // onResourceDeleted handles object delete event and push the deleted object to the resource queue.
