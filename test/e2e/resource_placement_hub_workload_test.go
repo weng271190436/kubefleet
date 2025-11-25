@@ -37,6 +37,7 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 	var testDeployment appsv1.Deployment
 	var testDaemonSet appsv1.DaemonSet
 	var testJob batchv1.Job
+	var testStatefulSet appsv1.StatefulSet
 
 	BeforeAll(func() {
 		// Read the test manifests
@@ -52,9 +53,11 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 		testDeployment.Namespace = workNamespace.Name
 		testDaemonSet.Namespace = workNamespace.Name
 		testJob.Namespace = workNamespace.Name
+		testStatefulSet.Namespace = workNamespace.Name
 		Expect(hubClient.Create(ctx, &testDeployment)).To(Succeed(), "Failed to create test deployment %s", testDeployment.Name)
 		Expect(hubClient.Create(ctx, &testDaemonSet)).To(Succeed(), "Failed to create test daemonset %s", testDaemonSet.Name)
 		Expect(hubClient.Create(ctx, &testJob)).To(Succeed(), "Failed to create test job %s", testJob.Name)
+		Expect(hubClient.Create(ctx, &testStatefulSet)).To(Succeed(), "Failed to create test statefulset %s", testStatefulSet.Name)
 
 		// Create the CRP that selects the namespace
 		By("creating CRP that selects the namespace")
@@ -104,6 +107,13 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 				Version:   "v1",
 				Kind:      "Job",
 				Name:      testJob.Name,
+				Namespace: workNamespace.Name,
+			},
+			{
+				Group:     "apps",
+				Version:   "v1",
+				Kind:      "StatefulSet",
+				Name:      testStatefulSet.Name,
 				Namespace: workNamespace.Name,
 			},
 			// PVCs created by StatefulSet controller from volumeClaimTemplates
@@ -185,6 +195,13 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 				"Hub job should complete successfully")
 		})
 
+		It("should verify hub statefulset is ready", func() {
+			By("checking hub statefulset status")
+			statefulSetReadyActual := waitForStatefulSetToBeReady(hubClient, &testStatefulSet)
+			Eventually(statefulSetReadyActual, workloadEventuallyDuration, eventuallyInterval).Should(Succeed(),
+				"Hub statefulset should be ready before placement")
+		})
+
 		It("should place the deployment on all member clusters", func() {
 			By("verifying deployment is placed and ready on all member clusters")
 			for idx := range allMemberClusters {
@@ -221,6 +238,24 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 			}
 		})
 
+		It("should place the statefulset on all member clusters", func() {
+			By("verifying statefulset is placed and ready on all member clusters")
+			for idx := range allMemberClusters {
+				memberCluster := allMemberClusters[idx]
+				statefulsetPlacedActual := waitForStatefulSetPlacementToReady(memberCluster, &testStatefulSet)
+				Eventually(statefulsetPlacedActual, workloadEventuallyDuration, eventuallyInterval).Should(Succeed(), "Failed to place statefulset on member cluster %s", memberCluster.ClusterName)
+			}
+		})
+
+		It("should verify statefulset replicas are ready on all clusters", func() {
+			By("checking statefulset status on each cluster")
+			for _, cluster := range allMemberClusters {
+				statefulSetReadyActual := waitForStatefulSetToBeReady(cluster.KubeClient, &testStatefulSet)
+				Eventually(statefulSetReadyActual, workloadEventuallyDuration, eventuallyInterval).Should(Succeed(),
+					"StatefulSet should be ready on cluster %s", cluster.ClusterName)
+			}
+		})
+
 		It("should verify deployment replicas are ready on all clusters", func() {
 			By("checking deployment status on each cluster")
 			for _, cluster := range allMemberClusters {
@@ -246,6 +281,46 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 		})
 	})
 })
+
+func waitForStatefulSetToBeReady(kubeClient client.Client, testStatefulSet *appsv1.StatefulSet) func() error {
+	return func() error {
+		var statefulSet appsv1.StatefulSet
+		if err := kubeClient.Get(ctx, types.NamespacedName{
+			Name:      testStatefulSet.Name,
+			Namespace: testStatefulSet.Namespace,
+		}, &statefulSet); err != nil {
+			return err
+		}
+
+		// Verify statefulset is ready
+		if statefulSet.Status.ObservedGeneration != statefulSet.Generation {
+			return fmt.Errorf("statefulset has stale status: observed generation %d != generation %d",
+				statefulSet.Status.ObservedGeneration, statefulSet.Generation)
+		}
+
+		requiredReplicas := int32(1)
+		if statefulSet.Spec.Replicas != nil {
+			requiredReplicas = *statefulSet.Spec.Replicas
+		}
+
+		if statefulSet.Status.CurrentReplicas != requiredReplicas {
+			return fmt.Errorf("statefulset not ready: %d/%d current replicas",
+				statefulSet.Status.CurrentReplicas, requiredReplicas)
+		}
+
+		if statefulSet.Status.UpdatedReplicas != requiredReplicas {
+			return fmt.Errorf("statefulset not updated: %d/%d updated replicas",
+				statefulSet.Status.UpdatedReplicas, requiredReplicas)
+		}
+
+		if statefulSet.Status.CurrentReplicas != statefulSet.Status.UpdatedReplicas {
+			return fmt.Errorf("statefulset replicas not synchronized: %d current != %d updated",
+				statefulSet.Status.CurrentReplicas, statefulSet.Status.UpdatedReplicas)
+		}
+
+		return nil
+	}
+}
 
 func waitForJobToComplete(kubeClient client.Client, testJob *batchv1.Job) func() error {
 	return func() error {
