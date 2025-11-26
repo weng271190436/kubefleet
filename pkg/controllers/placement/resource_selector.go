@@ -445,15 +445,18 @@ func generateRawContent(object *unstructured.Unstructured) ([]byte, error) {
 		delete(annots, corev1.LastAppliedConfigAnnotation)
 		// Remove the revision annotation set by deployment controller.
 		delete(annots, deployment.RevisionAnnotation)
-		// Remove node-specific annotations from PVCs that would break when propagated to member clusters
-		// These annotations reference specific nodes from the hub cluster which don't exist on member clusters
-		// The member cluster's storage provisioner will set appropriate values for its own nodes
+		// Remove node-specific and provisioning-related annotations from PVCs that would break when propagated to member clusters
+		// These annotations reference specific nodes/provisioners from the hub cluster which don't exist on member clusters
+		// The member cluster's storage provisioner will set appropriate values for its own environment
 		// All annotations below are listed in well-known labels, annotations and taints document:
 		// https://kubernetes.io/docs/reference/labels-annotations-taints/
 		delete(annots, pvutil.AnnSelectedNode)           // Node selected for volume binding
 		delete(annots, pvutil.AnnBindCompleted)          // Binding completion status
 		delete(annots, pvutil.AnnBoundByController)      // Controller binding status
+		delete(annots, pvutil.AnnStorageProvisioner)     // Storage provisioner annotation
 		delete(annots, pvutil.AnnBetaStorageProvisioner) // Beta storage provisioner annotation
+		delete(annots, pvutil.AnnDynamicallyProvisioned) // Dynamically provisioned by annotation
+		delete(annots, pvutil.AnnMigratedTo)             // CSI migration annotation
 		if len(annots) == 0 {
 			object.SetAnnotations(nil)
 		} else {
