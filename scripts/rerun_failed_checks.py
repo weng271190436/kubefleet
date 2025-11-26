@@ -311,11 +311,23 @@ class PRCheckWatcher:
                 log("✅ All checks have completed")
                 return True
             
-            log(f"  {len(in_progress)} checks still in progress... (checking again in {self.check_interval}s)")
+            # Also show failed checks that will be retried
+            if self.filter_e2e:
+                failed_checks = self.rerunner.get_e2e_failed_checks(self.pr_number)
+            else:
+                failed_checks = self.rerunner.get_failed_checks(self.pr_number)
+            
+            log(f"  {len(in_progress)} checks still in progress, {len(failed_checks)} failed (will retry)... (checking again in {self.check_interval}s)")
             for check in in_progress[:5]:  # Show first 5
                 log(f"    ⏳ {check.get('name')}")
             if len(in_progress) > 5:
-                log(f"    ... and {len(in_progress) - 5} more")
+                log(f"    ... and {len(in_progress) - 5} more in progress")
+            
+            if failed_checks:
+                for check in failed_checks[:3]:  # Show first 3 failed
+                    log(f"    ❌ {check.get('name')} - {check.get('conclusion')}")
+                if len(failed_checks) > 3:
+                    log(f"    ... and {len(failed_checks) - 3} more failed")
             
             time.sleep(self.check_interval)
     
