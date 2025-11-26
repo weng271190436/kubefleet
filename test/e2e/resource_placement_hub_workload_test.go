@@ -19,6 +19,7 @@ package e2e
 import (
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -132,7 +133,7 @@ var _ = Describe("placing workloads using a CRP with PickAll policy", Label("res
 			},
 		}
 		// Use customizedPlacementStatusUpdatedActual with resourceIsTrackable=false
-		// because Jobs and PVCs don't have availability tracking like Deployments/DaemonSets do
+		// because Jobs don't have availability tracking like Deployments/DaemonSets/StatefulSets/PVCs do
 		crpKey := types.NamespacedName{Name: crpName}
 		crpStatusUpdatedActual := customizedPlacementStatusUpdatedActual(crpKey, wantSelectedResources, allMemberClusterNames, nil, "0", false)
 		Eventually(crpStatusUpdatedActual, workloadEventuallyDuration, eventuallyInterval).Should(Succeed(), "Failed to update CRP status as expected")
@@ -293,29 +294,25 @@ func waitForStatefulSetToBeReady(kubeClient client.Client, testStatefulSet *apps
 		}
 
 		// Verify statefulset is ready
-		if statefulSet.Status.ObservedGeneration != statefulSet.Generation {
-			return fmt.Errorf("statefulset has stale status: observed generation %d != generation %d",
-				statefulSet.Status.ObservedGeneration, statefulSet.Generation)
-		}
-
 		requiredReplicas := int32(1)
 		if statefulSet.Spec.Replicas != nil {
 			requiredReplicas = *statefulSet.Spec.Replicas
 		}
 
-		if statefulSet.Status.CurrentReplicas != requiredReplicas {
-			return fmt.Errorf("statefulset not ready: %d/%d current replicas",
-				statefulSet.Status.CurrentReplicas, requiredReplicas)
+		wantStatus := appsv1.StatefulSetStatus{
+			ObservedGeneration: statefulSet.Generation,
+			CurrentReplicas:    requiredReplicas,
+			UpdatedReplicas:    requiredReplicas,
 		}
 
-		if statefulSet.Status.UpdatedReplicas != requiredReplicas {
-			return fmt.Errorf("statefulset not updated: %d/%d updated replicas",
-				statefulSet.Status.UpdatedReplicas, requiredReplicas)
+		gotStatus := appsv1.StatefulSetStatus{
+			ObservedGeneration: statefulSet.Status.ObservedGeneration,
+			CurrentReplicas:    statefulSet.Status.CurrentReplicas,
+			UpdatedReplicas:    statefulSet.Status.UpdatedReplicas,
 		}
 
-		if statefulSet.Status.CurrentReplicas != statefulSet.Status.UpdatedReplicas {
-			return fmt.Errorf("statefulset replicas not synchronized: %d current != %d updated",
-				statefulSet.Status.CurrentReplicas, statefulSet.Status.UpdatedReplicas)
+		if diff := cmp.Diff(wantStatus, gotStatus); diff != "" {
+			return fmt.Errorf("statefulset not ready (-want +got):\n%s", diff)
 		}
 
 		return nil
