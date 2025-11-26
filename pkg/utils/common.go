@@ -438,6 +438,12 @@ var (
 		Resource: "clusterrolebindings",
 	}
 
+	PersistentVolumeClaimGVR = schema.GroupVersionResource{
+		Group:    corev1.GroupName,
+		Version:  corev1.SchemeGroupVersion.Version,
+		Resource: "persistentvolumeclaims",
+	}
+
 	PersistentVolumeClaimGVK = schema.GroupVersionKind{
 		Group:   corev1.GroupName,
 		Version: corev1.SchemeGroupVersion.Version,
