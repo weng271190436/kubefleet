@@ -163,10 +163,12 @@ func (m *FakeManager) GetNameSpaceScopedResources() []schema.GroupVersionResourc
 func (m *FakeManager) GetAllResources() []schema.GroupVersionResource {
 	allResources := make([]schema.GroupVersionResource, 0, len(m.APIResources))
 	for gvk := range m.APIResources {
+		// Return a GVR with the same Group/Version and Kind as Resource
+		// The actual resource name doesn't matter since IsInformerSynced ignores the GVR parameter
 		gvr := schema.GroupVersionResource{
 			Group:    gvk.Group,
 			Version:  gvk.Version,
-			Resource: gvk.Kind + "s", // Simple pluralization for tests
+			Resource: gvk.Kind,
 		}
 		allResources = append(allResources, gvr)
 	}
