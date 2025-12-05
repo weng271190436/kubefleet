@@ -38,6 +38,8 @@ func ResourceInformerReadinessChecker(resourceInformer informer.Manager) func(*h
 		// Require ALL informer caches to be synced before marking ready
 		allResources := resourceInformer.GetAllResources()
 		if len(allResources) == 0 {
+			// This can happen during startup when the ResourceInformer is created but the ChangeDetector
+			// hasn't discovered and registered any resources yet via AddDynamicResources().
 			return fmt.Errorf("resource informer not ready: no resources registered")
 		}
 
