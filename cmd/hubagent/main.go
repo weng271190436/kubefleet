@@ -172,6 +172,8 @@ func main() {
 	// Add webhook readiness check AFTER controllers are set up (when ResourceInformer is initialized)
 	// This prevents webhook from accepting requests before discovery cache is populated
 	if opts.EnableWebhook {
+		// AddReadyzCheck adds additional readiness check instead of replacing the one registered earlier provided the name is different.
+		// Both registered checks need to pass for the manager to be considered ready.
 		if err := mgr.AddReadyzCheck("webhook-cache", webhook.ResourceInformerReadinessChecker(validator.ResourceInformer)); err != nil {
 			klog.ErrorS(err, "unable to set up webhook readiness check")
 			exitWithErrorFunc()
