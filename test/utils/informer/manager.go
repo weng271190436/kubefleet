@@ -160,6 +160,19 @@ func (m *FakeManager) GetNameSpaceScopedResources() []schema.GroupVersionResourc
 	return m.NamespaceScopedResources
 }
 
+func (m *FakeManager) GetAllResources() []schema.GroupVersionResource {
+	allResources := make([]schema.GroupVersionResource, 0, len(m.APIResources))
+	for gvk := range m.APIResources {
+		gvr := schema.GroupVersionResource{
+			Group:    gvk.Group,
+			Version:  gvk.Version,
+			Resource: gvk.Kind + "s", // Simple pluralization for tests
+		}
+		allResources = append(allResources, gvr)
+	}
+	return allResources
+}
+
 func (m *FakeManager) IsClusterScopedResources(gvk schema.GroupVersionKind) bool {
 	return m.APIResources[gvk] == m.IsClusterScopedResource
 }
