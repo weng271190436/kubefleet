@@ -107,3 +107,22 @@ func shouldWatchResource(gvr schema.GroupVersionResource, restMapper meta.RESTMa
 	}
 	return true
 }
+
+// discoverWatchableResources discovers all API resources in the cluster and filters them
+// based on the resource configuration. This is a shared helper used by both InformerPopulator
+// and ChangeDetector to ensure consistent resource discovery logic.
+func discoverWatchableResources(discoveryClient discovery.DiscoveryInterface, restMapper meta.RESTMapper, resourceConfig *utils.ResourceConfig) []informer.APIResourceMeta {
+	newResources, err := getWatchableResources(discoveryClient)
+	if err != nil {
+		klog.ErrorS(err, "Failed to get all the api resources from the cluster")
+	}
+
+	var resourcesToWatch []informer.APIResourceMeta
+	for _, res := range newResources {
+		if shouldWatchResource(res.GroupVersionResource, restMapper, resourceConfig) {
+			resourcesToWatch = append(resourcesToWatch, res)
+		}
+	}
+
+	return resourcesToWatch
+}

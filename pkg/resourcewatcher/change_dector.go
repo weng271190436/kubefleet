@@ -44,7 +44,7 @@ var (
 // ChangeDetector is a resource watcher which watches all types of resources in the cluster and reconcile the events.
 type ChangeDetector struct {
 	// DiscoveryClient is used to do resource discovery.
-	DiscoveryClient *discovery.DiscoveryClient
+	DiscoveryClient discovery.DiscoveryInterface
 
 	// RESTMapper is used to convert between GVK and GVR
 	RESTMapper meta.RESTMapper
@@ -138,26 +138,18 @@ func (d *ChangeDetector) discoverAPIResourcesLoop(ctx context.Context, period ti
 
 // discoverResources goes through all the api resources in the cluster and adds event handlers to informers
 func (d *ChangeDetector) discoverResources(dynamicResourceEventHandler cache.ResourceEventHandler) {
-	newResources, err := getWatchableResources(d.DiscoveryClient)
-	var dynamicResources []informer.APIResourceMeta
-	if err != nil {
-		klog.ErrorS(err, "Failed to get all the api resources from the cluster")
-	}
-	for _, res := range newResources {
-		// all the static resources are disabled by default
-		if shouldWatchResource(res.GroupVersionResource, d.RESTMapper, d.ResourceConfig) {
-			dynamicResources = append(dynamicResources, res)
-		}
-	}
+	resourcesToWatch := discoverWatchableResources(d.DiscoveryClient, d.RESTMapper, d.ResourceConfig)
 
 	// On the leader, add event handlers to informers that were already created by InformerPopulator
 	// The informers exist on all pods, but only the leader adds handlers and processes events
-	for _, res := range dynamicResources {
+	for _, res := range resourcesToWatch {
 		d.InformerManager.AddEventHandlerToInformer(res.GroupVersionResource, dynamicResourceEventHandler)
 	}
 
 	// this will start the newly added informers if there is any
 	d.InformerManager.Start()
+
+	klog.V(2).InfoS("Change detector: discovered resources", "count", len(resourcesToWatch))
 }
 
 // dynamicResourceFilter filters out resources that we don't want to watch

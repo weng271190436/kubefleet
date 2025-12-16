@@ -22,6 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+
+	testhandler "github.com/kubefleet-dev/kubefleet/test/utils/handler"
 )
 
 func TestGetAllResources(t *testing.T) {
@@ -324,8 +326,8 @@ func TestAddEventHandlerToInformer(t *testing.T) {
 
 			// Track handler calls
 			callCount := 0
-			handler := &testHandler{
-				onAdd: func() { callCount++ },
+			handler := &testhandler.TestHandler{
+				OnAddFunc: func() { callCount++ },
 			}
 
 			// Add the handler
@@ -340,8 +342,8 @@ func TestAddEventHandlerToInformer(t *testing.T) {
 
 			if tt.addTwice {
 				// Add another handler to the same informer
-				handler2 := &testHandler{
-					onAdd: func() { callCount++ },
+				handler2 := &testhandler.TestHandler{
+					OnAddFunc: func() { callCount++ },
 				}
 				mgr.AddEventHandlerToInformer(tt.gvr, handler2)
 			}
@@ -500,30 +502,5 @@ func TestCreateInformerForResource_IsIdempotent(t *testing.T) {
 	}
 	if !resMeta.isPresent {
 		t.Error("Expected resource to be marked as present")
-	}
-}
-
-// testHandler is a simple implementation of cache.ResourceEventHandler for testing
-type testHandler struct {
-	onAdd    func()
-	onUpdate func()
-	onDelete func()
-}
-
-func (h *testHandler) OnAdd(obj interface{}, isInInitialList bool) {
-	if h.onAdd != nil {
-		h.onAdd()
-	}
-}
-
-func (h *testHandler) OnUpdate(oldObj, newObj interface{}) {
-	if h.onUpdate != nil {
-		h.onUpdate()
-	}
-}
-
-func (h *testHandler) OnDelete(obj interface{}) {
-	if h.onDelete != nil {
-		h.onDelete()
 	}
 }

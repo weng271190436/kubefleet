@@ -81,30 +81,18 @@ func (p *InformerPopulator) Start(ctx context.Context) error {
 
 // discoverAndCreateInformers discovers API resources and creates informers WITHOUT adding event handlers
 func (p *InformerPopulator) discoverAndCreateInformers() {
-	newResources, err := getWatchableResources(p.DiscoveryClient)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get all the api resources from the cluster")
-	}
-
-	var resourcesToPopulate []informer.APIResourceMeta
-	for _, res := range newResources {
-		if shouldWatchResource(res.GroupVersionResource, p.RESTMapper, p.ResourceConfig) {
-			resourcesToPopulate = append(resourcesToPopulate, res)
-		}
-	}
+	resourcesToWatch := discoverWatchableResources(p.DiscoveryClient, p.RESTMapper, p.ResourceConfig)
 
 	// Create informers directly without adding event handlers.
 	// This avoids adding any event handlers on follower pods
-	for _, res := range resourcesToPopulate {
+	for _, res := range resourcesToWatch {
 		p.InformerManager.CreateInformerForResource(res)
 	}
 
 	// Start any newly created informers
 	p.InformerManager.Start()
 
-	if err == nil {
-		klog.V(2).InfoS("Informer populator: discovered resources", "count", len(resourcesToPopulate))
-	}
+	klog.V(2).InfoS("Informer populator: discovered resources", "count", len(resourcesToWatch))
 }
 
 // NeedLeaderElection implements LeaderElectionRunnable interface.
