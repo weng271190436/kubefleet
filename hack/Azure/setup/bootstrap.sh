@@ -2,12 +2,18 @@ export HUB_CLUSTER=hub
 export MEMBER_CLUSTER_1=member-1
 export MEMBER_CLUSTER_2=member-2
 export MEMBER_CLUSTER_3=member-3
+export MEMBER_CLUSTER_4=member-4
+export MEMBER_CLUSTER_5=member-5
+export MEMBER_CLUSTER_6=member-6
 az account set -s ${SUBSCRIPTION_ID}
 az group create --name ${RESOURCE_GROUP} --location ${LOCATION}
 az aks create --resource-group ${RESOURCE_GROUP} --name ${HUB_CLUSTER} --location ${LOCATION} --node-count 2
 az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_1} --location ${LOCATION} --node-count 2
 az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_2} --location ${LOCATION} --node-count 2
 az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_3} --location ${LOCATION} --node-count 2
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_4} --location ${LOCATION} --node-count 2
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_5} --location ${LOCATION} --node-count 2
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_6} --location ${LOCATION} --node-count 2
 
 
 export REGISTRY="mcr.microsoft.com/aks/fleet"
@@ -39,7 +45,7 @@ export HUB_CLUSTER_CONTEXT=$(kubectl config view -o jsonpath="{.contexts[?(@.nam
 export HUB_CLUSTER_ADDRESS=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.server}")
 
 # Define member clusters
-MEMBER_CLUSTERS=("$MEMBER_CLUSTER_1" "$MEMBER_CLUSTER_2" "$MEMBER_CLUSTER_3")
+MEMBER_CLUSTERS=("$MEMBER_CLUSTER_1" "$MEMBER_CLUSTER_2" "$MEMBER_CLUSTER_3" "$MEMBER_CLUSTER_4" "$MEMBER_CLUSTER_5" "$MEMBER_CLUSTER_6")
 
 for MEMBER_CLUSTER_NAME in "${MEMBER_CLUSTERS[@]}"; do
   az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${MEMBER_CLUSTER_NAME}" --overwrite-existing
