@@ -7,13 +7,19 @@ export MEMBER_CLUSTER_5=member-5
 export MEMBER_CLUSTER_6=member-6
 az account set -s ${SUBSCRIPTION_ID}
 az group create --name ${RESOURCE_GROUP} --location ${LOCATION}
-az aks create --resource-group ${RESOURCE_GROUP} --name ${HUB_CLUSTER} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_1} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_2} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_3} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_4} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_5} --location ${LOCATION} --node-count 2
-az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_6} --location ${LOCATION} --node-count 2
+
+# Create clusters in parallel
+az aks create --resource-group ${RESOURCE_GROUP} --name ${HUB_CLUSTER} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_1} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_2} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_3} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_4} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_5} --location ${LOCATION} --node-count 2 &
+az aks create --resource-group ${RESOURCE_GROUP} --name ${MEMBER_CLUSTER_6} --location ${LOCATION} --node-count 2 &
+
+# Wait for all cluster creation to complete
+wait
+echo "All clusters created successfully"
 
 
 export REGISTRY="mcr.microsoft.com/aks/fleet"
