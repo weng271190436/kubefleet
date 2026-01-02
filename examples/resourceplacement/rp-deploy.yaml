@@ -1,6 +1,55 @@
 # This tests selecting multiple resources in a namespace,
 # and only applying to a subset of clusters.
-# Prerequisite: create and expose a deployment named "test-nginx" in namespace "test-ns".
+# Prerequisite:
+# Run `kubectl apply -f rp-ns.yaml` in this directory to create the test namespace.
+# The deployment, and service are all defined below.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx
+  namespace: test-ns
+  labels:
+    app: test-nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-nginx
+  template:
+    metadata:
+      labels:
+        app: test-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-nginx
+  namespace: test-ns
+  labels:
+    app: test-nginx
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: test-nginx
+---
 apiVersion: placement.kubernetes-fleet.io/v1beta1
 kind: ResourcePlacement
 metadata:

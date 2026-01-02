@@ -1,6 +1,22 @@
 # This tests selecting a single resource in a namespace,
 # and applying it to all clusters.
-# Prerequisite: create a configMap named "test-cm" in namespace "test-ns".
+# Prerequisite:
+# Run `kubectl apply -f rp-ns.yaml` in this directory to create the test namespace.
+# The ConfigMap "test-cm", and ResourcePlacement are all defined below.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-cm
+  namespace: test-ns
+data:
+  key1: value1
+  key2: value2
+  config.yaml: |
+    app:
+      name: test-app
+      version: 1.0.0
+---
 apiVersion: placement.kubernetes-fleet.io/v1beta1
 kind: ResourcePlacement
 metadata:
