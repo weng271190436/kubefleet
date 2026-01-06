@@ -85,11 +85,12 @@ func NewInformerManager(client dynamic.Interface, defaultResync time.Duration, p
 	// TODO: replace this with plain context
 	ctx, cancel := ContextForChannel(parentCh)
 	return &informerManagerImpl{
-		dynamicClient:   client,
-		ctx:             ctx,
-		cancel:          cancel,
-		informerFactory: dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
-		apiResources:    make(map[schema.GroupVersionKind]*APIResourceMeta),
+		dynamicClient:      client,
+		ctx:                ctx,
+		cancel:             cancel,
+		informerFactory:    dynamicinformer.NewDynamicSharedInformerFactory(client, defaultResync),
+		apiResources:       make(map[schema.GroupVersionKind]*APIResourceMeta),
+		registeredHandlers: make(map[schema.GroupVersionResource]bool),
 	}
 }
 
@@ -217,11 +218,6 @@ func (s *informerManagerImpl) Stop() {
 func (s *informerManagerImpl) AddEventHandlerToInformer(resource schema.GroupVersionResource, handler cache.ResourceEventHandler) {
 	s.resourcesLock.Lock()
 	defer s.resourcesLock.Unlock()
-
-	// Initialize the map on first use
-	if s.registeredHandlers == nil {
-		s.registeredHandlers = make(map[schema.GroupVersionResource]bool)
-	}
 
 	// Check if handler already registered for this resource
 	if s.registeredHandlers[resource] {
