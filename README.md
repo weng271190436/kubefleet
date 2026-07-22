@@ -27,7 +27,7 @@ To learn more about KubeFleet go to the [KubeFleet documentation](https://kubefl
 
 You can reach the KubeFleet community and developers via the following channels:
 
-* Q & A: [GitHub Discussions](https://github.com/kubefleet-dev/kubefleet/discussions)
+* Q & A: [GitHub Discussions](https://go.goms.io/fleet/discussions)
 * Slack: [The #KubeFleet Slack channel](https://cloud-native.slack.com/archives/C08KR7589R8) 
 * Mailing list: [mailing list](https://groups.google.com/g/kubefleet-dev)
 

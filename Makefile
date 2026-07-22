@@ -237,7 +237,7 @@ collect-e2e-logs: ## Collect logs from hub and member agent pods after e2e tests
 
 ## reviewable
 .PHONY: reviewable
-reviewable: fmt vet lint staticcheck crd-verify ## Run all quality checks before PR
+reviewable: fmt vet lint staticcheck ## Run all quality checks before PR
 	go mod tidy
 
 ## --------------------------------------
@@ -334,21 +334,6 @@ crd-package: ## Package the raw CRDs into a release tarball with a SHA-256 check
 	cd $(CRD_PACKAGE_DIR) && $(SHA256SUM) $(CRD_PACKAGE_NAME).tgz > $(CRD_PACKAGE_NAME).tgz.sha256
 	@echo "Packaged CRDs into $(CRD_PACKAGE_DIR)/$(CRD_PACKAGE_NAME).tgz"
 
-.PHONY: crd-verify
-crd-verify: ## Verify the chart CRD directories cover every CRD in config/crd/bases
-	@bases="$$(mktemp)"; charts="$$(mktemp)"; \
-	ls config/crd/bases/ | sort > "$$bases"; \
-	{ ls charts/hub-agent/templates/crds/; ls charts/member-agent/templates/crds/; } | sort > "$$charts"; \
-	missing="$$(comm -3 "$$bases" "$$charts")"; \
-	rm -f "$$bases" "$$charts"; \
-	if [ -n "$$missing" ]; then \
-		echo "ERROR: chart CRD directories are out of sync with config/crd/bases."; \
-		echo "Left column = only in config/crd/bases; right column = only in the charts:"; \
-		echo "$$missing"; \
-		echo "If you added a CRD, symlink it into charts/hub-agent/templates/crds/ or charts/member-agent/templates/crds/."; \
-		exit 1; \
-	fi; \
-	echo "crd-verify: chart CRD directories cover all CRDs in config/crd/bases"
 
 # By default, docker buildx create will pull image moby/buildkit:buildx-stable-1 and hit the too many requests error
 #

@@ -189,7 +189,7 @@ The resource snapshot resolver is now fully aligned with the interface refactori
 ### What Was Done
 1. **Fixed Missing Imports**: Added required imports to `binding_resolver.go`
    - Added `"fmt"` import for error formatting
-   - Added `"github.com/kubefleet-dev/kubefleet/pkg/scheduler/queue"` import for `queue.PlacementKey` type
+   - Added `"go.goms.io/fleet/pkg/scheduler/queue"` import for `queue.PlacementKey` type
 
 2. **Compilation Success**: Fixed all compilation errors
    - No more "undefined: queue" errors
@@ -204,7 +204,7 @@ The resource snapshot resolver is now fully aligned with the interface refactori
 ### File Changes Made
 - `/Users/ryanzhang/Workspace/github/kubefleet/pkg/utils/controller/binding_resolver.go`
   - Added missing `"fmt"` import
-  - Added missing `"github.com/kubefleet-dev/kubefleet/pkg/scheduler/queue"` import
+  - Added missing `"go.goms.io/fleet/pkg/scheduler/queue"` import
 
 ### Status
 ✅ **ALL CONTROLLER UTILITY TESTS PASSING**: No test failures found
