@@ -28,7 +28,7 @@ jobs:
       - id: export
         run: |
           # registry must be in lowercase
-          echo "registry=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr [:upper:] [:lower:])" >> $GITHUB_OUTPUT
+          echo "registry=$(echo "${{ env.REGISTRY }}/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
   publish-images:
     needs: export-registry
     env:
@@ -42,9 +42,11 @@ jobs:
       - name: Set image version for a new release
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          echo "HUB_AGENT_IMAGE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          echo "MEMBER_AGENT_IMAGE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          echo "REFRESH_TOKEN_IMAGE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          {
+            echo "HUB_AGENT_IMAGE_VERSION=${GITHUB_REF#refs/tags/}"
+            echo "MEMBER_AGENT_IMAGE_VERSION=${GITHUB_REF#refs/tags/}"
+            echo "REFRESH_TOKEN_IMAGE_VERSION=${GITHUB_REF#refs/tags/}"
+          } >> "$GITHUB_ENV"
       - name: Login to ${{ env.REGISTRY }}
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
         with:

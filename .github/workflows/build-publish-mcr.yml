@@ -37,20 +37,20 @@ jobs:
           # set the image version
           RELEASE_TAG=${{ inputs.releaseTag }}
           if [ -z "$RELEASE_TAG" ]; then
-            RELEASE_TAG=`git describe --tags $(git rev-list --tags --max-count=1)`
+            RELEASE_TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)")
             echo "The user input release tag is empty, will use the latest tag $RELEASE_TAG."
           fi
-          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
           # Strip 'v' prefix from RELEASE_TAG for helm chart version
           ARC_HELMCHART_VERSION="${RELEASE_TAG#v}"
-          echo "arc_helmchart_version=$ARC_HELMCHART_VERSION" >> $GITHUB_OUTPUT
+          echo "arc_helmchart_version=$ARC_HELMCHART_VERSION" >> "$GITHUB_OUTPUT"
           echo "Using Arc Helm Chart version: $ARC_HELMCHART_VERSION"
 
           # Fetch the latest fleet-networking version
           # NOTE: The fleet-networking image must be cut and pushed to MCR first before retrieving this version
           FLEET_NETWORKING_VERSION="${FLEET_NETWORKING_VERSION:-$(curl "https://api.github.com/repos/Azure/fleet-networking/tags" | jq -r '.[0].name')}"
-          echo "fleet_networking_version=$FLEET_NETWORKING_VERSION" >> $GITHUB_OUTPUT
+          echo "fleet_networking_version=$FLEET_NETWORKING_VERSION" >> "$GITHUB_OUTPUT"
           echo "Using Fleet Networking version: $FLEET_NETWORKING_VERSION"
 
           # NOTE: As exporting a variable from a secret is not possible, the shared variable registry obtained
@@ -150,9 +150,9 @@ jobs:
         run: |
           sudo groupadd docker || true
           echo "Adding $USER to the docker group"
-          sudo usermod -aG docker $USER
+          sudo usermod -aG docker "$USER"
           newgrp docker
-          sudo setfacl --modify user:$USER:rw /var/run/docker.sock
+          sudo setfacl --modify "user:$USER:rw" /var/run/docker.sock
       - name: 'Login the ACR'
         # Note (chenyu1): must not use root privileges; the system seems to have some trouble
         # retrieving credentials when sudo is used.
