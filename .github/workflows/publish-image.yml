@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-  create:
-     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
 
 permissions:
@@ -23,7 +21,7 @@ env:
 
 jobs:
   export-registry:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       registry: ${{ steps.export.outputs.registry }}
     steps:
@@ -35,7 +33,7 @@ jobs:
     needs: export-registry
     env:
       REGISTRY: ${{ needs.export-registry.outputs.registry }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
