@@ -310,29 +310,6 @@ helm-push: ## Package and push Helm charts to OCI registry
 	helm push .helm-packages/member-agent-$(CHART_VERSION).tgz oci://$(REGISTRY)
 	rm -rf .helm-packages
 
-## --------------------------------------
-## CRD release bundle
-## --------------------------------------
-
-# Directory and artifact names for the standalone CRD release tarball.
-CRD_PACKAGE_DIR ?= _crd-package
-CRD_PACKAGE_NAME ?= kubefleet-crds-$(TAG)
-# Use sha256sum when available (Linux/CI), fall back to shasum (macOS).
-SHA256SUM ?= $(shell command -v sha256sum >/dev/null 2>&1 && echo "sha256sum" || echo "shasum -a 256")
-
-.PHONY: crd-package
-crd-package: ## Package the raw CRDs into a release tarball with a SHA-256 checksum
-	rm -rf $(CRD_PACKAGE_DIR)
-	mkdir -p $(CRD_PACKAGE_DIR)/crds/hub $(CRD_PACKAGE_DIR)/crds/member
-	# Source from the charts' CRD sets (symlinks into config/crd/bases) so the
-	# bundle mirrors exactly what each agent installs: hub-cluster CRDs under
-	# crds/hub, member-cluster CRDs under crds/member. cp -L dereferences the
-	# symlinks so the archive holds the raw CRD YAML, not dangling links.
-	cp -L charts/hub-agent/templates/crds/*.yaml $(CRD_PACKAGE_DIR)/crds/hub/
-	cp -L charts/member-agent/templates/crds/*.yaml $(CRD_PACKAGE_DIR)/crds/member/
-	tar -czf $(CRD_PACKAGE_DIR)/$(CRD_PACKAGE_NAME).tgz -C $(CRD_PACKAGE_DIR) crds
-	cd $(CRD_PACKAGE_DIR) && $(SHA256SUM) $(CRD_PACKAGE_NAME).tgz > $(CRD_PACKAGE_NAME).tgz.sha256
-	@echo "Packaged CRDs into $(CRD_PACKAGE_DIR)/$(CRD_PACKAGE_NAME).tgz"
 
 
 # By default, docker buildx create will pull image moby/buildkit:buildx-stable-1 and hit the too many requests error

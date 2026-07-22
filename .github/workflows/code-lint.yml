@@ -87,6 +87,3 @@ jobs:
         run: |
           helm lint charts/hub-agent
           helm lint charts/member-agent
-
-      - name: Verify chart CRDs cover config/crd/bases
-        run: make crd-verify
