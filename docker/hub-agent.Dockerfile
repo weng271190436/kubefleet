@@ -21,9 +21,9 @@ COPY pkg/ pkg/
 RUN echo "Building for GOOS=$GOOS GOARCH=$GOARCH"
 RUN CGO_ENABLED=1 GOOS=$GOOS GOARCH=$GOARCH GOEXPERIMENT=systemcrypto GO111MODULE=on go build -o hubagent  cmd/hubagent/main.go
 
-# Use Azure Linux distroless base image to package the hubagent binary
-# Refer to https://mcr.microsoft.com/en-us/artifact/mar/azurelinux/distroless/base/about for more details
-FROM mcr.microsoft.com/azurelinux/distroless/base:3.0
+# Use distroless as minimal base image to package the hubagent binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/base:nonroot@sha256:b78832f41c8128046807c24840ebee4f1c18ba7870eed423d8750c272c15e147
 WORKDIR /
 COPY --from=builder /workspace/hubagent .
 USER 65532:65532
