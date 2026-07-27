@@ -187,4 +187,4 @@ When making changes to charts:
 For issues or questions about KubeFleet Helm charts, please:
 - Check the [main documentation](https://kubefleet.dev/docs/)
 - Review chart-specific READMEs
-- Open an issue in the [GitHub repository](https://github.com/kubefleet-dev/kubefleet/issues)
+- Open an issue in the [GitHub repository](https://go.goms.io/fleet/issues)
