@@ -68,7 +68,7 @@ GOIMPORTS_VER := v0.42.0
 GOIMPORTS_BIN := goimports
 GOIMPORTS := $(abspath $(TOOLS_BIN_DIR)/$(GOIMPORTS_BIN)-$(GOIMPORTS_VER))
 
-GOLANGCI_LINT_VER := v1.64.7
+GOLANGCI_LINT_VER := v2.13.2
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(abspath $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER))
 
@@ -87,7 +87,7 @@ GO_INSTALL := ./hack/go-install.sh
 ## --------------------------------------
 
 $(GOLANGCI_LINT):
-	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
 
 $(CONTROLLER_GEN):
 	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) sigs.k8s.io/controller-tools/cmd/controller-gen $(CONTROLLER_GEN_BIN) $(CONTROLLER_GEN_VER)
@@ -115,11 +115,11 @@ help: ## Display this help
 
 .PHONY: lint
 lint: $(GOLANGCI_LINT) ## Run fast linting
-	$(GOLANGCI_LINT) run -v
+	$(GOLANGCI_LINT) run -v --fast-only
 
 .PHONY: lint-full
 lint-full: $(GOLANGCI_LINT) ## Run slower linters to detect possible issues
-	$(GOLANGCI_LINT) run -v --fast=false
+	$(GOLANGCI_LINT) run -v
 
 ## --------------------------------------
 ## Development
