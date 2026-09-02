@@ -42,12 +42,14 @@
 - `hideDiffValuesUnlessOwned` preserves values only when the live object has the exact expected AppliedWork owner reference.
 - Focused tests cover the ownership matrix and exercise unmanaged ReportDiff and takeover-refusal paths through complete manifest processing.
 - Integration expectations retain all changed paths while omitting values for missing, takeover-disabled, and takeover-refused resources.
+- E2E expectations apply the same ownership rule without weakening positive coverage: owned-resource diffs and all drift details still retain values.
 
 ## Changes Made
 
 - Added the ReportDiff post-processing policy in `pkg/controllers/workapplier/process.go`.
 - Added focused policy and behavioral tests in `pkg/controllers/workapplier/process_test.go`.
 - Updated work-applier integration expectations for resources Fleet does not own.
+- Updated CRP, ResourcePlacement, API progression, apply-strategy transition, staged rollout, and backoff expectations for unowned resources.
 
 ## Validation
 
@@ -56,6 +58,9 @@
 - Apply-mode partial/full comparison takeover-refusal and strategy-switch integration contexts pass.
 - `go vet ./pkg/controllers/workapplier`, editor diagnostics, and `git diff --check` pass.
 - The unfiltered package run reached the existing 10-minute Go test timeout while starting a later integration case; no assertion failure was reported. The changed contexts were rerun directly and passed.
+- The E2E package compiles after updating all 14 ownership-related CI failures.
+- The focused ownership-policy unit tests pass.
+- The full ordered `slow backoff and fast backoff` envtest context passes after correcting its stale takeover-refusal fixture.
 - Published for review as https://github.com/kubefleet-dev/kubefleet/pull/872.
 
 ## Before/After Comparison
