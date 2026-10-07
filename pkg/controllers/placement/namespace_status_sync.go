@@ -33,7 +33,7 @@ import (
 
 const (
 	noNamespaceResourceSelectorMsg = "NamespaceAccessible ClusterResourcePlacement doesn't specify a resource selector which selects a namespace"
-	redactedPatchValue             = "(redacted for security reasons)"
+	redactedPatchValue             = "(redacted)"
 
 	failedCRPSMessageFmt           = "Failed to create or update ClusterResourcePlacementStatus: %v"
 	successfulCRPSMessageFmt       = "Successfully created or updated ClusterResourcePlacementStatus in namespace '%s'"

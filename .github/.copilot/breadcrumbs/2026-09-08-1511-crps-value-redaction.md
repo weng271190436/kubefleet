@@ -18,7 +18,7 @@
 
 ## Decisions
 
-- Use the repository's established marker, `(redacted for security reasons)`, for consistency with Secret drift redaction.
+- Use the marker `(redacted)` for projected drift and diff values.
 - Replace only non-empty values because an empty string indicates that the JSON path does not exist on that side.
 - Do not redact condition messages in this PR; its scope is limited to `ValueInMember` and `ValueInHub`.
 
@@ -26,4 +26,3 @@
 
 - Focused namespace projection tests pass with Go 1.26.6.
 - The shared CRPS integration helper compiles and `git diff --check` passes.
-

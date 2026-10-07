@@ -1692,7 +1692,7 @@ func (rpl *ResourcePlacementList) GetPlacementObjs() []PlacementObj {
 // ClusterResourcePlacement object. The projection includes only the target Namespace and resources and references
 // within it, allowing namespace-scoped access without exposing other cluster-scoped or namespaced resources.
 // Non-empty ValueInMember and ValueInHub fields in drift and diff details are replaced with
-// "(redacted for security reasons)" in this projection.
+// "(redacted)" in this projection.
 // The LastUpdatedTime field is updated whenever the object is updated.
 //
 // This object will be created within the target namespace that contains resources being managed by the CRP.
@@ -1706,7 +1706,7 @@ type ClusterResourcePlacementStatus struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Source status projected from the corresponding ClusterResourcePlacement for the target namespace, with
-	// non-empty member and hub values in drift and diff details redacted for security reasons.
+	// non-empty member and hub values in drift and diff details redacted.
 	// +kubebuilder:validation:Required
 	PlacementStatus `json:"sourceStatus,omitempty"`
 

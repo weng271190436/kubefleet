@@ -15,7 +15,7 @@ import (
 	"github.com/kubefleet-dev/kubefleet/pkg/utils"
 )
 
-const redactedPatchValue = "(redacted for security reasons)"
+const redactedPatchValue = "(redacted)"
 
 var (
 	// Define comparison options for ignoring auto-generated and time-dependent fields.
