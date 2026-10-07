@@ -15,6 +15,8 @@ import (
 	"github.com/kubefleet-dev/kubefleet/pkg/utils"
 )
 
+const redactedPatchValue = "(redacted for security reasons)"
+
 var (
 	// Define comparison options for ignoring auto-generated and time-dependent fields.
 	crpsCmpOpts = []cmp.Option{
@@ -158,6 +160,7 @@ func projectDriftedPlacements(placements []placementv1beta1.DriftedResourcePlace
 	for _, placement := range placements {
 		if identifier, ok := projectResourceIdentifier(placement.ResourceIdentifier, targetNamespace); ok {
 			placement.ResourceIdentifier = identifier
+			redactPatchDetails(placement.ObservedDrifts)
 			projected = append(projected, placement)
 		}
 	}
@@ -172,10 +175,34 @@ func projectDiffedPlacements(placements []placementv1beta1.DiffedResourcePlaceme
 	for _, placement := range placements {
 		if identifier, ok := projectResourceIdentifier(placement.ResourceIdentifier, targetNamespace); ok {
 			placement.ResourceIdentifier = identifier
+			redactPatchDetails(placement.ObservedDiffs)
 			projected = append(projected, placement)
 		}
 	}
 	return projected
+}
+
+func redactPatchDetails(details []placementv1beta1.PatchDetail) {
+	for idx := range details {
+		if details[idx].ValueInMember != "" {
+			details[idx].ValueInMember = redactedPatchValue
+		}
+		if details[idx].ValueInHub != "" {
+			details[idx].ValueInHub = redactedPatchValue
+		}
+	}
+}
+
+func validatePatchDetails(details []placementv1beta1.PatchDetail, resourceKind, resourceName string) error {
+	for _, detail := range details {
+		if detail.ValueInMember != "" && detail.ValueInMember != redactedPatchValue {
+			return fmt.Errorf("CRPS reports unredacted member value for %s/%s at %s", resourceKind, resourceName, detail.Path)
+		}
+		if detail.ValueInHub != "" && detail.ValueInHub != redactedPatchValue {
+			return fmt.Errorf("CRPS reports unredacted hub value for %s/%s at %s", resourceKind, resourceName, detail.Path)
+		}
+	}
+	return nil
 }
 
 func validateNamespaceProjection(status *placementv1beta1.PlacementStatus, targetNamespace string) error {
@@ -216,9 +243,15 @@ func validateNamespaceProjection(status *placementv1beta1.PlacementStatus, targe
 			if err := validateIdentifier(placement.ResourceIdentifier); err != nil {
 				return err
 			}
+			if err := validatePatchDetails(placement.ObservedDrifts, placement.Kind, placement.Name); err != nil {
+				return err
+			}
 		}
 		for _, placement := range clusterStatus.DiffedPlacements {
 			if err := validateIdentifier(placement.ResourceIdentifier); err != nil {
+				return err
+			}
+			if err := validatePatchDetails(placement.ObservedDiffs, placement.Kind, placement.Name); err != nil {
 				return err
 			}
 		}

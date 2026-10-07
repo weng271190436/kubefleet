@@ -79,6 +79,7 @@ func TestBuildNamespaceAccessiblePlacementStatus(t *testing.T) {
 						ResourceIdentifier: placementv1beta1.ResourceIdentifier{Group: "apps", Version: "v1", Kind: "Deployment", Namespace: targetNamespace, Name: "api"},
 						ObservedDrifts: []placementv1beta1.PatchDetail{
 							{Path: "/spec/template/spec/containers/0/env/0/value", ValueInMember: "member-secret", ValueInHub: "hub-secret"},
+							{Path: "/spec/template/spec/containers/0/env/1/value", ValueInHub: "hub-only"},
 						},
 					},
 					{
@@ -128,13 +129,16 @@ func TestBuildNamespaceAccessiblePlacementStatus(t *testing.T) {
 				DriftedPlacements: []placementv1beta1.DriftedResourcePlacement{
 					{
 						ResourceIdentifier: placementv1beta1.ResourceIdentifier{Group: "apps", Version: "v1", Kind: "Deployment", Namespace: targetNamespace, Name: "api"},
-						ObservedDrifts:     []placementv1beta1.PatchDetail{{Path: "/spec/template/spec/containers/0/env/0/value", ValueInMember: "member-secret", ValueInHub: "hub-secret"}},
+						ObservedDrifts: []placementv1beta1.PatchDetail{
+							{Path: "/spec/template/spec/containers/0/env/0/value", ValueInMember: redactedPatchValue, ValueInHub: redactedPatchValue},
+							{Path: "/spec/template/spec/containers/0/env/1/value", ValueInHub: redactedPatchValue},
+						},
 					},
 				},
 				DiffedPlacements: []placementv1beta1.DiffedResourcePlacement{
 					{
 						ResourceIdentifier: placementv1beta1.ResourceIdentifier{Version: "v1", Kind: "Namespace", Name: targetNamespace},
-						ObservedDiffs:      []placementv1beta1.PatchDetail{{Path: "/metadata/labels/team", ValueInMember: "member-value", ValueInHub: "hub-value"}},
+						ObservedDiffs:      []placementv1beta1.PatchDetail{{Path: "/metadata/labels/team", ValueInMember: redactedPatchValue, ValueInHub: redactedPatchValue}},
 					},
 				},
 				Conditions: []metav1.Condition{{Type: "Applied", Status: metav1.ConditionFalse, Reason: "ApplyFailed", Message: "member object contained rejected value secret"}},
@@ -195,7 +199,7 @@ func TestSyncClusterResourcePlacementStatusSanitizesNamespaceView(t *testing.T) 
 	wantDiffedPlacements := []placementv1beta1.DiffedResourcePlacement{
 		{
 			ResourceIdentifier: placementv1beta1.ResourceIdentifier{Group: "apps", Version: "v1", Kind: "Deployment", Namespace: targetNamespace, Name: "api"},
-			ObservedDiffs:      []placementv1beta1.PatchDetail{{Path: "/spec/template/spec/containers/0/env", ValueInMember: "member-secret", ValueInHub: "hub-secret"}},
+			ObservedDiffs:      []placementv1beta1.PatchDetail{{Path: "/spec/template/spec/containers/0/env", ValueInMember: redactedPatchValue, ValueInHub: redactedPatchValue}},
 		},
 	}
 	if diff := cmp.Diff(wantDiffedPlacements, got.PlacementStatus.PerClusterPlacementStatuses[0].DiffedPlacements); diff != "" {

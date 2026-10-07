@@ -33,6 +33,7 @@ import (
 
 const (
 	noNamespaceResourceSelectorMsg = "NamespaceAccessible ClusterResourcePlacement doesn't specify a resource selector which selects a namespace"
+	redactedPatchValue             = "(redacted for security reasons)"
 
 	failedCRPSMessageFmt           = "Failed to create or update ClusterResourcePlacementStatus: %v"
 	successfulCRPSMessageFmt       = "Successfully created or updated ClusterResourcePlacementStatus in namespace '%s'"
@@ -182,10 +183,22 @@ func filterDriftedPlacementsByNamespace(placements []placementv1beta1.DriftedRes
 	for _, placement := range placements {
 		if isResourceInNamespaceScope(placement.ResourceIdentifier, targetNamespace) {
 			placement.ResourceIdentifier = sanitizeResourceIdentifier(placement.ResourceIdentifier, targetNamespace)
+			redactPatchDetailValues(placement.ObservedDrifts)
 			filtered = append(filtered, placement)
 		}
 	}
 	return filtered
+}
+
+func redactPatchDetailValues(details []placementv1beta1.PatchDetail) {
+	for idx := range details {
+		if details[idx].ValueInMember != "" {
+			details[idx].ValueInMember = redactedPatchValue
+		}
+		if details[idx].ValueInHub != "" {
+			details[idx].ValueInHub = redactedPatchValue
+		}
+	}
 }
 
 func filterDiffedPlacementsByNamespace(placements []placementv1beta1.DiffedResourcePlacement, targetNamespace string) []placementv1beta1.DiffedResourcePlacement {
@@ -197,6 +210,7 @@ func filterDiffedPlacementsByNamespace(placements []placementv1beta1.DiffedResou
 	for _, placement := range placements {
 		if isResourceInNamespaceScope(placement.ResourceIdentifier, targetNamespace) {
 			placement.ResourceIdentifier = sanitizeResourceIdentifier(placement.ResourceIdentifier, targetNamespace)
+			redactPatchDetailValues(placement.ObservedDiffs)
 			filtered = append(filtered, placement)
 		}
 	}
