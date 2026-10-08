@@ -333,6 +333,60 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 	}
 }
 
+func TestDescribeAttributes(t *testing.T) {
+	testCases := map[string]struct {
+		attributes authorizationv1.ResourceAttributes
+		want       string
+	}{
+		"core cluster-scoped named resource": {
+			attributes: authorizationv1.ResourceAttributes{
+				Verb:     "get",
+				Resource: "namespaces",
+				Name:     "workloads",
+			},
+			want: `get namespaces "workloads"`,
+		},
+		"grouped namespaced named resource": {
+			attributes: authorizationv1.ResourceAttributes{
+				Namespace: "workloads",
+				Verb:      "get",
+				Group:     "apps",
+				Resource:  "deployments",
+				Name:      "frontend",
+			},
+			want: `get deployments.apps "frontend" in namespace "workloads"`,
+		},
+		"subresource": {
+			attributes: authorizationv1.ResourceAttributes{
+				Namespace:   "workloads",
+				Verb:        "update",
+				Group:       "apps",
+				Resource:    "deployments",
+				Subresource: "status",
+				Name:        "frontend",
+			},
+			want: `update deployments.apps/status "frontend" in namespace "workloads"`,
+		},
+		"namespaced list": {
+			attributes: authorizationv1.ResourceAttributes{
+				Namespace: "workloads",
+				Verb:      "list",
+				Resource:  "secrets",
+			},
+			want: `list secrets in namespace "workloads"`,
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			got := describeAttributes(tc.attributes)
+			if got != tc.want {
+				t.Errorf("describeAttributes(%v) = %q, want %q", tc.attributes, got, tc.want)
+			}
+		})
+	}
+}
+
 func newTestReviewer(t *testing.T, client SubjectAccessReviewClient, maxConcurrentReviews int) *Reviewer {
 	t.Helper()
 	reviewer, err := NewReviewer(client, meta.NewDefaultRESTMapper(nil), maxConcurrentReviews)
