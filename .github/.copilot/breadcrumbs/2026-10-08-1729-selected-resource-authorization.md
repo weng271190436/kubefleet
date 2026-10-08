@@ -22,9 +22,9 @@
 
 ### Phase 1: Authorization foundation and tests
 
-- [x] Add a request-scoped selected-resource authorizer that creates Kubernetes SubjectAccessReviews and preserves all admission user information.
+- [x] Add a selected-resource reviewer that creates Kubernetes SubjectAccessReviews and preserves all admission user information.
 - [x] Add RESTMapper-based conversion from selector GVKs to the plural GVRs required by SubjectAccessReview.
-- [x] Deduplicate identical checks within one admission request and use bounded concurrency for object-level reviews.
+- [x] Deduplicate identical checks within one authorization batch and use bounded concurrency for object-level reviews.
 - [x] Add unit tests for allowed, denied, no-opinion, API-error, timeout, identity-copying, and duplicate-review cases.
 - **Success criterion:** Authorization behavior is independently testable and every unresolved or unsuccessful review fails closed.
 
@@ -84,10 +84,10 @@ Plan approved by the user. Phase 1 is complete; Phases 2-5 have not started.
 
 ## Phase 1 implementation details
 
-- Added `pkg/utils/authorization` with a reusable Reviewer and request-scoped RequestAuthorizer.
+- Added `pkg/utils/authorization` with a reusable, stateless batch Reviewer.
 - Preserved username, UID, groups, and deep-copied extras in every SubjectAccessReview.
 - Added RESTMapper-based GVK-to-GVR conversion for correctly pluralized authorization attributes.
-- Deduplicated identical attributes within and across authorization calls for one admission request, including shared in-flight results.
+- Deduplicated identical attributes within each authorization batch; separate calls always perform fresh reviews.
 - Limited concurrent SubjectAccessReviews per request while preserving the original authorization failure during fail-fast cancellation.
 - Failed closed on explicit denials, no-opinion decisions, evaluation errors, conflicting decisions, nil responses, API errors, and context timeouts.
 - Added focused unit coverage for resource mapping, identity propagation, every fail-closed result, timeout handling, deduplication, bounded concurrency, and fail-fast error preservation.

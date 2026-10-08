@@ -119,9 +119,8 @@ func TestAuthorizePreservesUserInfo(t *testing.T) {
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
-	authorizer := reviewer.NewRequestAuthorizer(userInfo)
 
-	if err := authorizer.Authorize(context.Background(), attributes); err != nil {
+	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
 		t.Fatalf("Authorize() returned error %v, want nil", err)
 	}
 
@@ -197,8 +196,7 @@ func TestAuthorizeFailsClosed(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			reviewer := newTestReviewer(t, &fakeSubjectAccessReviewClient{create: tc.create}, DefaultMaxConcurrentReviews)
-			authorizer := reviewer.NewRequestAuthorizer(authenticationv1.UserInfo{Username: "requester"})
-			err := authorizer.Authorize(context.Background(), authorizationv1.ResourceAttributes{
+			err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
 				Verb:     "get",
 				Resource: "namespaces",
 				Name:     "workloads",
@@ -218,11 +216,10 @@ func TestAuthorizeHonorsContextTimeout(t *testing.T) {
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
-	authorizer := reviewer.NewRequestAuthorizer(authenticationv1.UserInfo{Username: "requester"})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
-	err := authorizer.Authorize(ctx, authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"})
+	err := reviewer.Authorize(ctx, authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Authorize() error = %v, want %v", err, context.DeadlineExceeded)
 	}
@@ -237,10 +234,10 @@ func TestAuthorizeReturnsReviewErrorWhenConcurrencyIsLimited(t *testing.T) {
 		},
 	}
 	reviewer := newTestReviewer(t, client, 1)
-	authorizer := reviewer.NewRequestAuthorizer(authenticationv1.UserInfo{Username: "requester"})
 
-	err := authorizer.Authorize(
+	err := reviewer.Authorize(
 		context.Background(),
+		authenticationv1.UserInfo{Username: "requester"},
 		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "first"},
 		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "second"},
 	)
@@ -260,17 +257,38 @@ func TestAuthorizeDeduplicatesReviews(t *testing.T) {
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
-	authorizer := reviewer.NewRequestAuthorizer(authenticationv1.UserInfo{Username: "requester"})
 	attributes := authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"}
 
-	if err := authorizer.Authorize(context.Background(), attributes, attributes); err != nil {
-		t.Fatalf("Authorize() returned error %v, want nil", err)
-	}
-	if err := authorizer.Authorize(context.Background(), attributes); err != nil {
+	if err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, attributes, attributes); err != nil {
 		t.Fatalf("Authorize() returned error %v, want nil", err)
 	}
 	if got := calls.Load(); got != 1 {
 		t.Errorf("SubjectAccessReview calls = %d, want 1", got)
+	}
+}
+
+func TestAuthorizeDoesNotCacheAcrossCalls(t *testing.T) {
+	var calls atomic.Int32
+	client := &fakeSubjectAccessReviewClient{
+		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+			calls.Add(1)
+			return &authorizationv1.SubjectAccessReview{
+				Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
+			}, nil
+		},
+	}
+	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
+	userInfo := authenticationv1.UserInfo{Username: "requester"}
+	attributes := authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"}
+
+	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
+		t.Fatalf("Authorize() returned error %v, want nil", err)
+	}
+	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
+		t.Fatalf("Authorize() returned error %v, want nil", err)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Errorf("SubjectAccessReview calls = %d, want 2", got)
 	}
 }
 
@@ -294,7 +312,6 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 		},
 	}
 	reviewer := newTestReviewer(t, client, maxConcurrentReview)
-	authorizer := reviewer.NewRequestAuthorizer(authenticationv1.UserInfo{Username: "requester"})
 	attributes := make([]authorizationv1.ResourceAttributes, reviewCount)
 	for i := range attributes {
 		attributes[i] = authorizationv1.ResourceAttributes{
@@ -306,7 +323,7 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		result <- authorizer.Authorize(context.Background(), attributes...)
+		result <- reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, attributes...)
 	}()
 
 	for i := 0; i < maxConcurrentReview; i++ {

@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 
 	"golang.org/x/sync/errgroup"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -42,7 +41,7 @@ type SubjectAccessReviewClient interface {
 	Create(context.Context, *authorizationv1.SubjectAccessReview, metav1.CreateOptions) (*authorizationv1.SubjectAccessReview, error)
 }
 
-// Reviewer resolves resource kinds and creates request-scoped authorizers.
+// Reviewer resolves resource kinds and reviews selected-resource access.
 type Reviewer struct {
 	client               SubjectAccessReviewClient
 	restMapper           meta.RESTMapper
@@ -83,31 +82,9 @@ func (r *Reviewer) ResourceAttributesFor(gvk schema.GroupVersionKind, verb, name
 	}, nil
 }
 
-// NewRequestAuthorizer creates an authorizer bound to one admission request's user identity.
-func (r *Reviewer) NewRequestAuthorizer(userInfo authenticationv1.UserInfo) *RequestAuthorizer {
-	return &RequestAuthorizer{
-		reviewer: r,
-		userInfo: copyUserInfo(userInfo),
-		reviews:  make(map[string]*reviewEntry),
-	}
-}
-
-// RequestAuthorizer performs and deduplicates the authorization checks for one admission request.
-type RequestAuthorizer struct {
-	reviewer *Reviewer
-	userInfo authenticationv1.UserInfo
-
-	mu      sync.Mutex
-	reviews map[string]*reviewEntry
-}
-
-type reviewEntry struct {
-	ready chan struct{}
-	err   error
-}
-
 // Authorize verifies that the request user is allowed to perform all the supplied resource actions.
-func (a *RequestAuthorizer) Authorize(ctx context.Context, attributes ...authorizationv1.ResourceAttributes) error {
+func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.UserInfo, attributes ...authorizationv1.ResourceAttributes) error {
+	userInfo = copyUserInfo(userInfo)
 	uniqueAttributes := make([]authorizationv1.ResourceAttributes, 0, len(attributes))
 	seen := make(map[string]struct{}, len(attributes))
 	for i := range attributes {
@@ -123,7 +100,7 @@ func (a *RequestAuthorizer) Authorize(ctx context.Context, attributes ...authori
 	}
 
 	reviews, reviewCtx := errgroup.WithContext(ctx)
-	reviews.SetLimit(a.reviewer.maxConcurrentReviews)
+	reviews.SetLimit(r.maxConcurrentReviews)
 	var submissionErr error
 	for i := range uniqueAttributes {
 		attributes := uniqueAttributes[i]
@@ -132,7 +109,7 @@ func (a *RequestAuthorizer) Authorize(ctx context.Context, attributes ...authori
 			break
 		}
 		reviews.Go(func() error {
-			return a.authorizeOne(reviewCtx, attributes)
+			return r.review(reviewCtx, userInfo, attributes)
 		})
 	}
 	if err := reviews.Wait(); err != nil {
@@ -141,45 +118,17 @@ func (a *RequestAuthorizer) Authorize(ctx context.Context, attributes ...authori
 	return submissionErr
 }
 
-func (a *RequestAuthorizer) authorizeOne(ctx context.Context, attributes authorizationv1.ResourceAttributes) error {
-	key, err := reviewKey(attributes)
-	if err != nil {
-		return fmt.Errorf("failed to build authorization review key: %w", err)
-	}
-
-	a.mu.Lock()
-	entry, found := a.reviews[key]
-	if !found {
-		entry = &reviewEntry{ready: make(chan struct{})}
-		a.reviews[key] = entry
-	}
-	a.mu.Unlock()
-
-	if found {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-entry.ready:
-			return entry.err
-		}
-	}
-
-	entry.err = a.review(ctx, attributes)
-	close(entry.ready)
-	return entry.err
-}
-
-func (a *RequestAuthorizer) review(ctx context.Context, attributes authorizationv1.ResourceAttributes) error {
+func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInfo, attributes authorizationv1.ResourceAttributes) error {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
-			User:               a.userInfo.Username,
-			UID:                a.userInfo.UID,
-			Groups:             append([]string(nil), a.userInfo.Groups...),
-			Extra:              authorizationExtra(a.userInfo.Extra),
+			User:               userInfo.Username,
+			UID:                userInfo.UID,
+			Groups:             append([]string(nil), userInfo.Groups...),
+			Extra:              authorizationExtra(userInfo.Extra),
 			ResourceAttributes: attributes.DeepCopy(),
 		},
 	}
-	result, err := a.reviewer.client.Create(ctx, review, metav1.CreateOptions{})
+	result, err := r.client.Create(ctx, review, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create SubjectAccessReview for %s: %w", describeAttributes(attributes), err)
 	}
