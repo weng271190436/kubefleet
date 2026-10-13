@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -41,23 +42,12 @@ type SubjectAccessReviewClient interface {
 	Create(context.Context, ctrlclient.Object, ...ctrlclient.CreateOption) error
 }
 
-// Result reports an authorization decision or a failure to reach one.
-// When Err is non-nil, Allowed and Reason do not represent an authorization decision.
+// Result reports the aggregate outcome of an authorization batch.
+// When Reason and Err are both set, the denial is conclusive and Err reports additional review failures.
 type Result struct {
 	Allowed bool
 	Reason  string
 	Err     error
-}
-
-func (r *Result) Error() string {
-	if r.Err != nil {
-		return r.Err.Error()
-	}
-	return r.Reason
-}
-
-func (r *Result) Unwrap() error {
-	return r.Err
 }
 
 // Reviewer resolves resource kinds and reviews selected-resource access.
@@ -118,32 +108,51 @@ func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.User
 		uniqueAttributes = append(uniqueAttributes, attributes[i])
 	}
 
-	reviews, reviewCtx := errgroup.WithContext(ctx)
+	var reviews errgroup.Group
 	reviews.SetLimit(r.maxConcurrentReviews)
+	results := make([]Result, len(uniqueAttributes))
 	var submissionErr error
+	submitted := 0
 	for i := range uniqueAttributes {
 		attributes := uniqueAttributes[i]
-		if err := reviewCtx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			submissionErr = err
 			break
 		}
 		reviews.Go(func() error {
-			result := r.review(reviewCtx, userInfo, attributes)
-			if result.Allowed {
-				return nil
-			}
-			return &result
+			results[i] = r.review(ctx, userInfo, attributes)
+			return nil
 		})
+		submitted++
 	}
 	if err := reviews.Wait(); err != nil {
-		var result *Result
-		if errors.As(err, &result) {
-			return *result
-		}
 		return Result{Err: err}
 	}
+
+	reasons := make([]string, 0, submitted)
+	errs := make([]error, 0, submitted+1)
 	if submissionErr != nil {
-		return Result{Err: submissionErr}
+		errs = append(errs, submissionErr)
+	}
+	for i := range submitted {
+		if results[i].Allowed {
+			continue
+		}
+		if results[i].Reason != "" {
+			reasons = append(reasons, results[i].Reason)
+		}
+		if results[i].Err != nil {
+			errs = append(errs, results[i].Err)
+		}
+		if results[i].Reason == "" && results[i].Err == nil {
+			errs = append(errs, fmt.Errorf("authorization review for %s returned no decision", describeAttributes(uniqueAttributes[i])))
+		}
+	}
+	if len(reasons) != 0 || len(errs) != 0 {
+		return Result{
+			Reason: strings.Join(reasons, "; "),
+			Err:    errors.Join(errs...),
+		}
 	}
 	return Result{Allowed: true}
 }

@@ -267,6 +267,51 @@ func TestAuthorizeReturnsDenialWhenConcurrencyIsLimited(t *testing.T) {
 	}
 }
 
+func TestAuthorizeCollectsReviewResults(t *testing.T) {
+	apiErr := errors.New("API server unavailable")
+	var calls atomic.Int32
+	client := &fakeSubjectAccessReviewClient{
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+			calls.Add(1)
+			switch review.Spec.ResourceAttributes.Name {
+			case "first":
+				review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "first denied"}
+				return nil
+			case "second":
+				return apiErr
+			case "third":
+				review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "third denied"}
+				return nil
+			default:
+				return fmt.Errorf("unexpected resource %q", review.Spec.ResourceAttributes.Name)
+			}
+		},
+	}
+	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
+
+	result := reviewer.Authorize(
+		context.Background(),
+		authenticationv1.UserInfo{Username: "requester"},
+		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "first"},
+		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "second"},
+		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "third"},
+	)
+
+	if result.Allowed {
+		t.Errorf("Authorize() = %+v, want denied result", result)
+	}
+	wantReason := `SubjectAccessReview denied access to get configmaps "first": first denied; SubjectAccessReview denied access to get configmaps "third": third denied`
+	if result.Reason != wantReason {
+		t.Errorf("Authorize() reason = %q, want %q", result.Reason, wantReason)
+	}
+	if !errors.Is(result.Err, apiErr) {
+		t.Errorf("Authorize() error = %v, want joined error containing %v", result.Err, apiErr)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Errorf("SubjectAccessReview calls = %d, want 3", got)
+	}
+}
+
 func TestAuthorizeDeduplicatesReviews(t *testing.T) {
 	var calls atomic.Int32
 	client := &fakeSubjectAccessReviewClient{
