@@ -135,23 +135,23 @@ func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInf
 	if result == nil {
 		return fmt.Errorf("SubjectAccessReview for %s returned no result", describeAttributes(attributes))
 	}
-	if result.Status.EvaluationError != "" {
-		return fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), result.Status.EvaluationError)
-	}
 	if result.Status.Allowed && result.Status.Denied {
 		return fmt.Errorf("SubjectAccessReview for %s returned conflicting allowed and denied decisions", describeAttributes(attributes))
 	}
-	if !result.Status.Allowed {
-		decision := "no opinion"
-		if result.Status.Denied {
-			decision = "denied"
-		}
-		if result.Status.Reason == "" {
-			return fmt.Errorf("SubjectAccessReview %s access to %s", decision, describeAttributes(attributes))
-		}
-		return fmt.Errorf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), result.Status.Reason)
+	if result.Status.Allowed {
+		return nil
 	}
-	return nil
+	if result.Status.EvaluationError != "" {
+		return fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), result.Status.EvaluationError)
+	}
+	decision := "no opinion"
+	if result.Status.Denied {
+		decision = "denied"
+	}
+	if result.Status.Reason == "" {
+		return fmt.Errorf("SubjectAccessReview %s access to %s", decision, describeAttributes(attributes))
+	}
+	return fmt.Errorf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), result.Status.Reason)
 }
 
 func reviewKey(attributes authorizationv1.ResourceAttributes) (string, error) {

@@ -164,7 +164,6 @@ func TestAuthorizeFailsClosed(t *testing.T) {
 			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
 				return &authorizationv1.SubjectAccessReview{
 					Status: authorizationv1.SubjectAccessReviewStatus{
-						Allowed:         true,
 						EvaluationError: "authorizer failed",
 					},
 				}, nil
@@ -205,6 +204,29 @@ func TestAuthorizeFailsClosed(t *testing.T) {
 				t.Errorf("Authorize() error = %v, want error containing %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestAuthorizeAllowsConclusiveDecisionWithEvaluationError(t *testing.T) {
+	client := &fakeSubjectAccessReviewClient{
+		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+			return &authorizationv1.SubjectAccessReview{
+				Status: authorizationv1.SubjectAccessReviewStatus{
+					Allowed:         true,
+					EvaluationError: "another authorizer failed",
+				},
+			}, nil
+		},
+	}
+	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
+
+	err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
+		Verb:     "get",
+		Resource: "namespaces",
+		Name:     "workloads",
+	})
+	if err != nil {
+		t.Errorf("Authorize() error = %v, want nil", err)
 	}
 }
 
