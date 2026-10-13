@@ -124,8 +124,9 @@ func TestAuthorizePreservesUserInfo(t *testing.T) {
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
 
-	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
-		t.Fatalf("Authorize() returned error %v, want nil", err)
+	result := reviewer.Authorize(context.Background(), userInfo, attributes)
+	if !result.Allowed || result.Err != nil {
+		t.Fatalf("Authorize() = %+v, want allowed result", result)
 	}
 
 	wantSpec := authorizationv1.SubjectAccessReviewSpec{
@@ -144,24 +145,25 @@ func TestAuthorizePreservesUserInfo(t *testing.T) {
 	}
 }
 
-func TestAuthorizeFailsClosed(t *testing.T) {
+func TestAuthorizeReturnsDenialsAndErrors(t *testing.T) {
 	apiErr := errors.New("API server unavailable")
 	testCases := map[string]struct {
 		create  func(context.Context, *authorizationv1.SubjectAccessReview) error
 		wantErr string
+		reason  string
 	}{
 		"denied": {
 			create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 				review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"}
 				return nil
 			},
-			wantErr: "denied access",
+			reason: "denied access",
 		},
 		"no opinion": {
 			create: func(context.Context, *authorizationv1.SubjectAccessReview) error {
 				return nil
 			},
-			wantErr: "no opinion",
+			reason: "no opinion",
 		},
 		"evaluation error": {
 			create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
@@ -188,13 +190,19 @@ func TestAuthorizeFailsClosed(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			reviewer := newTestReviewer(t, &fakeSubjectAccessReviewClient{create: tc.create}, DefaultMaxConcurrentReviews)
-			err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
+			result := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
 				Verb:     "get",
 				Resource: "namespaces",
 				Name:     "workloads",
 			})
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("Authorize() error = %v, want error containing %q", err, tc.wantErr)
+			if result.Allowed {
+				t.Errorf("Authorize() = %+v, want denied or error result", result)
+			}
+			if tc.wantErr != "" && (result.Err == nil || !strings.Contains(result.Err.Error(), tc.wantErr)) {
+				t.Errorf("Authorize() error = %v, want error containing %q", result.Err, tc.wantErr)
+			}
+			if tc.reason != "" && (result.Err != nil || !strings.Contains(result.Reason, tc.reason)) {
+				t.Errorf("Authorize() = %+v, want denial reason containing %q", result, tc.reason)
 			}
 		})
 	}
@@ -212,13 +220,13 @@ func TestAuthorizeAllowsConclusiveDecisionWithEvaluationError(t *testing.T) {
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
 
-	err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
+	result := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{
 		Verb:     "get",
 		Resource: "namespaces",
 		Name:     "workloads",
 	})
-	if err != nil {
-		t.Errorf("Authorize() error = %v, want nil", err)
+	if !result.Allowed || result.Err != nil {
+		t.Errorf("Authorize() = %+v, want allowed result", result)
 	}
 }
 
@@ -233,13 +241,13 @@ func TestAuthorizeHonorsContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
-	err := reviewer.Authorize(ctx, authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Authorize() error = %v, want %v", err, context.DeadlineExceeded)
+	result := reviewer.Authorize(ctx, authenticationv1.UserInfo{Username: "requester"}, authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"})
+	if !errors.Is(result.Err, context.DeadlineExceeded) {
+		t.Errorf("Authorize() error = %v, want %v", result.Err, context.DeadlineExceeded)
 	}
 }
 
-func TestAuthorizeReturnsReviewErrorWhenConcurrencyIsLimited(t *testing.T) {
+func TestAuthorizeReturnsDenialWhenConcurrencyIsLimited(t *testing.T) {
 	client := &fakeSubjectAccessReviewClient{
 		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 			review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"}
@@ -248,14 +256,14 @@ func TestAuthorizeReturnsReviewErrorWhenConcurrencyIsLimited(t *testing.T) {
 	}
 	reviewer := newTestReviewer(t, client, 1)
 
-	err := reviewer.Authorize(
+	result := reviewer.Authorize(
 		context.Background(),
 		authenticationv1.UserInfo{Username: "requester"},
 		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "first"},
 		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "second"},
 	)
-	if err == nil || !strings.Contains(err.Error(), "RBAC denied the request") {
-		t.Errorf("Authorize() error = %v, want original authorization denial", err)
+	if result.Allowed || result.Err != nil || !strings.Contains(result.Reason, "RBAC denied the request") {
+		t.Errorf("Authorize() = %+v, want original authorization denial", result)
 	}
 }
 
@@ -271,8 +279,9 @@ func TestAuthorizeDeduplicatesReviews(t *testing.T) {
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
 	attributes := authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"}
 
-	if err := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, attributes, attributes); err != nil {
-		t.Fatalf("Authorize() returned error %v, want nil", err)
+	result := reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, attributes, attributes)
+	if !result.Allowed || result.Err != nil {
+		t.Fatalf("Authorize() = %+v, want allowed result", result)
 	}
 	if got := calls.Load(); got != 1 {
 		t.Errorf("SubjectAccessReview calls = %d, want 1", got)
@@ -292,11 +301,13 @@ func TestAuthorizeDoesNotCacheAcrossCalls(t *testing.T) {
 	userInfo := authenticationv1.UserInfo{Username: "requester"}
 	attributes := authorizationv1.ResourceAttributes{Verb: "get", Resource: "namespaces", Name: "workloads"}
 
-	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
-		t.Fatalf("Authorize() returned error %v, want nil", err)
+	result := reviewer.Authorize(context.Background(), userInfo, attributes)
+	if !result.Allowed || result.Err != nil {
+		t.Fatalf("Authorize() = %+v, want allowed result", result)
 	}
-	if err := reviewer.Authorize(context.Background(), userInfo, attributes); err != nil {
-		t.Fatalf("Authorize() returned error %v, want nil", err)
+	result = reviewer.Authorize(context.Background(), userInfo, attributes)
+	if !result.Allowed || result.Err != nil {
+		t.Fatalf("Authorize() = %+v, want allowed result", result)
 	}
 	if got := calls.Load(); got != 2 {
 		t.Errorf("SubjectAccessReview calls = %d, want 2", got)
@@ -331,7 +342,7 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 		}
 	}
 
-	result := make(chan error, 1)
+	result := make(chan Result, 1)
 	go func() {
 		result <- reviewer.Authorize(context.Background(), authenticationv1.UserInfo{Username: "requester"}, attributes...)
 	}()
@@ -351,9 +362,9 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 
 	closeRelease.Do(func() { close(release) })
 	select {
-	case err := <-result:
-		if err != nil {
-			t.Errorf("Authorize() returned error %v, want nil", err)
+	case got := <-result:
+		if !got.Allowed || got.Err != nil {
+			t.Errorf("Authorize() = %+v, want allowed result", got)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Authorize() did not finish after reviews were released")

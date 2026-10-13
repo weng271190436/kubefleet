@@ -88,9 +88,9 @@ Plan approved by the user. Phase 1 is complete; Phases 2-5 have not started.
 - Preserved username, UID, groups, and deep-copied extras in every SubjectAccessReview.
 - Added RESTMapper-based GVK-to-GVR conversion for correctly pluralized authorization attributes.
 - Deduplicated identical attributes within each authorization batch; separate calls always perform fresh reviews.
-- Limited concurrent SubjectAccessReviews per request while preserving the original authorization failure during fail-fast cancellation.
-- Failed closed on explicit denials, no-opinion decisions, evaluation errors, conflicting decisions, nil responses, API errors, and context timeouts.
-- Added focused unit coverage for resource mapping, identity propagation, every fail-closed result, timeout handling, deduplication, bounded concurrency, and fail-fast error preservation.
+- Limited concurrent SubjectAccessReviews per request while preserving the original authorization result during fail-fast cancellation.
+- Returned structured results that distinguish explicit denials and no-opinion decisions from evaluation, API, and malformed-response errors.
+- Added focused unit coverage for resource mapping, identity propagation, denial and error results, timeout handling, deduplication, bounded concurrency, and fail-fast result preservation.
 
 ## Phase 1 validation
 

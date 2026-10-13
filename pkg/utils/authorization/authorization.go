@@ -41,6 +41,29 @@ type SubjectAccessReviewClient interface {
 	Create(context.Context, ctrlclient.Object, ...ctrlclient.CreateOption) error
 }
 
+// Result reports an authorization decision or a failure to reach one.
+// When Err is non-nil, Allowed and Reason do not represent an authorization decision.
+type Result struct {
+	Allowed bool
+	Reason  string
+	Err     error
+}
+
+type resultError struct {
+	result Result
+}
+
+func (e *resultError) Error() string {
+	if e.result.Err != nil {
+		return e.result.Err.Error()
+	}
+	return e.result.Reason
+}
+
+func (e *resultError) Unwrap() error {
+	return e.result.Err
+}
+
 // Reviewer resolves resource kinds and reviews selected-resource access.
 type Reviewer struct {
 	client               SubjectAccessReviewClient
@@ -83,14 +106,14 @@ func (r *Reviewer) ResourceAttributesFor(gvk schema.GroupVersionKind, verb, name
 }
 
 // Authorize verifies that the request user is allowed to perform all the supplied resource actions.
-func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.UserInfo, attributes ...authorizationv1.ResourceAttributes) error {
+func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.UserInfo, attributes ...authorizationv1.ResourceAttributes) Result {
 	userInfo = *userInfo.DeepCopy()
 	uniqueAttributes := make([]authorizationv1.ResourceAttributes, 0, len(attributes))
 	seen := make(map[string]struct{}, len(attributes))
 	for i := range attributes {
 		key, err := reviewKey(attributes[i])
 		if err != nil {
-			return fmt.Errorf("failed to build authorization review key: %w", err)
+			return Result{Err: fmt.Errorf("failed to build authorization review key: %w", err)}
 		}
 		if _, ok := seen[key]; ok {
 			continue
@@ -109,16 +132,27 @@ func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.User
 			break
 		}
 		reviews.Go(func() error {
-			return r.review(reviewCtx, userInfo, attributes)
+			result := r.review(reviewCtx, userInfo, attributes)
+			if result.Allowed {
+				return nil
+			}
+			return &resultError{result: result}
 		})
 	}
 	if err := reviews.Wait(); err != nil {
-		return err
+		var resultErr *resultError
+		if errors.As(err, &resultErr) {
+			return resultErr.result
+		}
+		return Result{Err: err}
 	}
-	return submissionErr
+	if submissionErr != nil {
+		return Result{Err: submissionErr}
+	}
+	return Result{Allowed: true}
 }
 
-func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInfo, attributes authorizationv1.ResourceAttributes) error {
+func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInfo, attributes authorizationv1.ResourceAttributes) Result {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			User:               userInfo.Username,
@@ -129,25 +163,25 @@ func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInf
 		},
 	}
 	if err := r.client.Create(ctx, review); err != nil {
-		return fmt.Errorf("failed to create SubjectAccessReview for %s: %w", describeAttributes(attributes), err)
+		return Result{Err: fmt.Errorf("failed to create SubjectAccessReview for %s: %w", describeAttributes(attributes), err)}
 	}
 	if review.Status.Allowed && review.Status.Denied {
-		return fmt.Errorf("SubjectAccessReview for %s returned conflicting allowed and denied decisions", describeAttributes(attributes))
+		return Result{Err: fmt.Errorf("SubjectAccessReview for %s returned conflicting allowed and denied decisions", describeAttributes(attributes))}
 	}
 	if review.Status.Allowed {
-		return nil
+		return Result{Allowed: true}
 	}
 	if review.Status.EvaluationError != "" {
-		return fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), review.Status.EvaluationError)
+		return Result{Err: fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), review.Status.EvaluationError)}
 	}
 	decision := "no opinion"
 	if review.Status.Denied {
 		decision = "denied"
 	}
 	if review.Status.Reason == "" {
-		return fmt.Errorf("SubjectAccessReview %s access to %s", decision, describeAttributes(attributes))
+		return Result{Reason: fmt.Sprintf("SubjectAccessReview %s access to %s", decision, describeAttributes(attributes))}
 	}
-	return fmt.Errorf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), review.Status.Reason)
+	return Result{Reason: fmt.Sprintf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), review.Status.Reason)}
 }
 
 func reviewKey(attributes authorizationv1.ResourceAttributes) (string, error) {
