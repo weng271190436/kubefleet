@@ -19,6 +19,7 @@ package authorization
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,15 +30,19 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type fakeSubjectAccessReviewClient struct {
-	create func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error)
+	create func(context.Context, *authorizationv1.SubjectAccessReview) error
 }
 
-func (f *fakeSubjectAccessReviewClient) Create(ctx context.Context, review *authorizationv1.SubjectAccessReview, _ metav1.CreateOptions) (*authorizationv1.SubjectAccessReview, error) {
+func (f *fakeSubjectAccessReviewClient) Create(ctx context.Context, obj ctrlclient.Object, _ ...ctrlclient.CreateOption) error {
+	review, ok := obj.(*authorizationv1.SubjectAccessReview)
+	if !ok {
+		return fmt.Errorf("object type = %T, want *authorizationv1.SubjectAccessReview", obj)
+	}
 	return f.create(ctx, review)
 }
 
@@ -111,11 +116,10 @@ func TestAuthorizePreservesUserInfo(t *testing.T) {
 	}
 	var gotSpec authorizationv1.SubjectAccessReviewSpec
 	client := &fakeSubjectAccessReviewClient{
-		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 			gotSpec = *review.Spec.DeepCopy()
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
-			}, nil
+			review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
@@ -143,52 +147,41 @@ func TestAuthorizePreservesUserInfo(t *testing.T) {
 func TestAuthorizeFailsClosed(t *testing.T) {
 	apiErr := errors.New("API server unavailable")
 	testCases := map[string]struct {
-		create  func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error)
+		create  func(context.Context, *authorizationv1.SubjectAccessReview) error
 		wantErr string
 	}{
 		"denied": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return &authorizationv1.SubjectAccessReview{
-					Status: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"},
-				}, nil
+			create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+				review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"}
+				return nil
 			},
 			wantErr: "denied access",
 		},
 		"no opinion": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return &authorizationv1.SubjectAccessReview{}, nil
+			create: func(context.Context, *authorizationv1.SubjectAccessReview) error {
+				return nil
 			},
 			wantErr: "no opinion",
 		},
 		"evaluation error": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return &authorizationv1.SubjectAccessReview{
-					Status: authorizationv1.SubjectAccessReviewStatus{
-						EvaluationError: "authorizer failed",
-					},
-				}, nil
+			create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+				review.Status = authorizationv1.SubjectAccessReviewStatus{EvaluationError: "authorizer failed"}
+				return nil
 			},
 			wantErr: "evaluation error",
 		},
 		"conflicting decision": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return &authorizationv1.SubjectAccessReview{
-					Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true, Denied: true},
-				}, nil
+			create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+				review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true, Denied: true}
+				return nil
 			},
 			wantErr: "conflicting",
 		},
 		"API error": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return nil, apiErr
+			create: func(context.Context, *authorizationv1.SubjectAccessReview) error {
+				return apiErr
 			},
 			wantErr: apiErr.Error(),
-		},
-		"empty response": {
-			create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-				return nil, nil
-			},
-			wantErr: "returned no result",
 		},
 	}
 
@@ -209,13 +202,12 @@ func TestAuthorizeFailsClosed(t *testing.T) {
 
 func TestAuthorizeAllowsConclusiveDecisionWithEvaluationError(t *testing.T) {
 	client := &fakeSubjectAccessReviewClient{
-		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{
-					Allowed:         true,
-					EvaluationError: "another authorizer failed",
-				},
-			}, nil
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+			review.Status = authorizationv1.SubjectAccessReviewStatus{
+				Allowed:         true,
+				EvaluationError: "another authorizer failed",
+			}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
@@ -232,9 +224,9 @@ func TestAuthorizeAllowsConclusiveDecisionWithEvaluationError(t *testing.T) {
 
 func TestAuthorizeHonorsContextTimeout(t *testing.T) {
 	client := &fakeSubjectAccessReviewClient{
-		create: func(ctx context.Context, _ *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+		create: func(ctx context.Context, _ *authorizationv1.SubjectAccessReview) error {
 			<-ctx.Done()
-			return nil, ctx.Err()
+			return ctx.Err()
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
@@ -249,10 +241,9 @@ func TestAuthorizeHonorsContextTimeout(t *testing.T) {
 
 func TestAuthorizeReturnsReviewErrorWhenConcurrencyIsLimited(t *testing.T) {
 	client := &fakeSubjectAccessReviewClient{
-		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"},
-			}, nil
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+			review.Status = authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: "RBAC denied the request"}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, 1)
@@ -271,11 +262,10 @@ func TestAuthorizeReturnsReviewErrorWhenConcurrencyIsLimited(t *testing.T) {
 func TestAuthorizeDeduplicatesReviews(t *testing.T) {
 	var calls atomic.Int32
 	client := &fakeSubjectAccessReviewClient{
-		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 			calls.Add(1)
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
-			}, nil
+			review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
@@ -292,11 +282,10 @@ func TestAuthorizeDeduplicatesReviews(t *testing.T) {
 func TestAuthorizeDoesNotCacheAcrossCalls(t *testing.T) {
 	var calls atomic.Int32
 	client := &fakeSubjectAccessReviewClient{
-		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 			calls.Add(1)
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
-			}, nil
+			review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
@@ -325,12 +314,11 @@ func TestAuthorizeLimitsConcurrency(t *testing.T) {
 	defer closeRelease.Do(func() { close(release) })
 
 	client := &fakeSubjectAccessReviewClient{
-		create: func(context.Context, *authorizationv1.SubjectAccessReview) (*authorizationv1.SubjectAccessReview, error) {
+		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
 			started <- struct{}{}
 			<-release
-			return &authorizationv1.SubjectAccessReview{
-				Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
-			}, nil
+			review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
+			return nil
 		},
 	}
 	reviewer := newTestReviewer(t, client, maxConcurrentReview)

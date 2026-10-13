@@ -27,8 +27,8 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -38,7 +38,7 @@ const (
 
 // SubjectAccessReviewClient creates SubjectAccessReviews.
 type SubjectAccessReviewClient interface {
-	Create(context.Context, *authorizationv1.SubjectAccessReview, metav1.CreateOptions) (*authorizationv1.SubjectAccessReview, error)
+	Create(context.Context, ctrlclient.Object, ...ctrlclient.CreateOption) error
 }
 
 // Reviewer resolves resource kinds and reviews selected-resource access.
@@ -128,30 +128,26 @@ func (r *Reviewer) review(ctx context.Context, userInfo authenticationv1.UserInf
 			ResourceAttributes: attributes.DeepCopy(),
 		},
 	}
-	result, err := r.client.Create(ctx, review, metav1.CreateOptions{})
-	if err != nil {
+	if err := r.client.Create(ctx, review); err != nil {
 		return fmt.Errorf("failed to create SubjectAccessReview for %s: %w", describeAttributes(attributes), err)
 	}
-	if result == nil {
-		return fmt.Errorf("SubjectAccessReview for %s returned no result", describeAttributes(attributes))
-	}
-	if result.Status.Allowed && result.Status.Denied {
+	if review.Status.Allowed && review.Status.Denied {
 		return fmt.Errorf("SubjectAccessReview for %s returned conflicting allowed and denied decisions", describeAttributes(attributes))
 	}
-	if result.Status.Allowed {
+	if review.Status.Allowed {
 		return nil
 	}
-	if result.Status.EvaluationError != "" {
-		return fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), result.Status.EvaluationError)
+	if review.Status.EvaluationError != "" {
+		return fmt.Errorf("SubjectAccessReview for %s reported an evaluation error: %s", describeAttributes(attributes), review.Status.EvaluationError)
 	}
 	decision := "no opinion"
-	if result.Status.Denied {
+	if review.Status.Denied {
 		decision = "denied"
 	}
-	if result.Status.Reason == "" {
+	if review.Status.Reason == "" {
 		return fmt.Errorf("SubjectAccessReview %s access to %s", decision, describeAttributes(attributes))
 	}
-	return fmt.Errorf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), result.Status.Reason)
+	return fmt.Errorf("SubjectAccessReview %s access to %s: %s", decision, describeAttributes(attributes), review.Status.Reason)
 }
 
 func reviewKey(attributes authorizationv1.ResourceAttributes) (string, error) {
