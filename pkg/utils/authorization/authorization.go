@@ -111,30 +111,27 @@ func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.User
 	var reviews errgroup.Group
 	reviews.SetLimit(r.maxConcurrentReviews)
 	results := make([]Result, len(uniqueAttributes))
-	var submissionErr error
-	submitted := 0
 	for i := range uniqueAttributes {
 		attributes := uniqueAttributes[i]
 		if err := ctx.Err(); err != nil {
-			submissionErr = err
+			for j := i; j < len(uniqueAttributes); j++ {
+				results[j] = Result{
+					Err: fmt.Errorf("authorization review for %s was not submitted: %w", describeAttributes(uniqueAttributes[j]), err),
+				}
+			}
 			break
 		}
 		reviews.Go(func() error {
 			results[i] = r.review(ctx, userInfo, attributes)
 			return nil
 		})
-		submitted++
 	}
-	if err := reviews.Wait(); err != nil {
-		return Result{Err: err}
-	}
+	// Review outcomes are stored in results; group functions do not return errors.
+	_ = reviews.Wait()
 
-	reasons := make([]string, 0, submitted)
-	errs := make([]error, 0, submitted+1)
-	if submissionErr != nil {
-		errs = append(errs, submissionErr)
-	}
-	for i := range submitted {
+	reasons := make([]string, 0, len(results))
+	errs := make([]error, 0, len(results))
+	for i := range results {
 		if results[i].Allowed {
 			continue
 		}

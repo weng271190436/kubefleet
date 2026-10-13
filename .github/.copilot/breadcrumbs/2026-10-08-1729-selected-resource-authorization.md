@@ -88,7 +88,7 @@ Plan approved by the user. Phase 1 is complete; Phases 2-5 have not started.
 - Preserved username, UID, groups, and deep-copied extras in every SubjectAccessReview.
 - Added RESTMapper-based GVK-to-GVR conversion for correctly pluralized authorization attributes.
 - Deduplicated identical attributes within each authorization batch; separate calls always perform fresh reviews.
-- Limited concurrent SubjectAccessReviews per request and collected every submitted review result in stable input order.
+- Limited concurrent SubjectAccessReviews per request, collected results in stable input order, and recorded explicit failures for reviews not submitted after request cancellation.
 - Returned structured results that aggregate explicit denials separately from joined evaluation, API, and malformed-response errors; conclusive denials take precedence while errors remain available for logging.
 - Added focused unit coverage for resource mapping, identity propagation, aggregated denial and error results, timeout handling, deduplication, and bounded concurrency.
 

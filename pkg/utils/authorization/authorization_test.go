@@ -247,6 +247,42 @@ func TestAuthorizeHonorsContextTimeout(t *testing.T) {
 	}
 }
 
+func TestAuthorizeRecordsUnsubmittedReviews(t *testing.T) {
+	var calls atomic.Int32
+	client := &fakeSubjectAccessReviewClient{
+		create: func(context.Context, *authorizationv1.SubjectAccessReview) error {
+			calls.Add(1)
+			return nil
+		},
+	}
+	reviewer := newTestReviewer(t, client, DefaultMaxConcurrentReviews)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result := reviewer.Authorize(
+		ctx,
+		authenticationv1.UserInfo{Username: "requester"},
+		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "first"},
+		authorizationv1.ResourceAttributes{Verb: "get", Resource: "configmaps", Name: "second"},
+	)
+
+	if result.Allowed {
+		t.Errorf("Authorize() = %+v, want error result", result)
+	}
+	if !errors.Is(result.Err, context.Canceled) {
+		t.Errorf("Authorize() error = %v, want joined error containing %v", result.Err, context.Canceled)
+	}
+	for _, name := range []string{"first", "second"} {
+		want := fmt.Sprintf(`authorization review for get configmaps %q was not submitted`, name)
+		if !strings.Contains(result.Err.Error(), want) {
+			t.Errorf("Authorize() error = %q, want error containing %q", result.Err, want)
+		}
+	}
+	if got := calls.Load(); got != 0 {
+		t.Errorf("SubjectAccessReview calls = %d, want 0", got)
+	}
+}
+
 func TestAuthorizeReturnsDenialWhenConcurrencyIsLimited(t *testing.T) {
 	client := &fakeSubjectAccessReviewClient{
 		create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
