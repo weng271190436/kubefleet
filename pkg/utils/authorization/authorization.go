@@ -84,7 +84,7 @@ func (r *Reviewer) ResourceAttributesFor(gvk schema.GroupVersionKind, verb, name
 
 // Authorize verifies that the request user is allowed to perform all the supplied resource actions.
 func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.UserInfo, attributes ...authorizationv1.ResourceAttributes) error {
-	userInfo = copyUserInfo(userInfo)
+	userInfo = *userInfo.DeepCopy()
 	uniqueAttributes := make([]authorizationv1.ResourceAttributes, 0, len(attributes))
 	seen := make(map[string]struct{}, len(attributes))
 	for i := range attributes {
@@ -160,21 +160,6 @@ func reviewKey(attributes authorizationv1.ResourceAttributes) (string, error) {
 		return "", err
 	}
 	return string(key), nil
-}
-
-func copyUserInfo(userInfo authenticationv1.UserInfo) authenticationv1.UserInfo {
-	copied := authenticationv1.UserInfo{
-		Username: userInfo.Username,
-		UID:      userInfo.UID,
-		Groups:   append([]string(nil), userInfo.Groups...),
-	}
-	if userInfo.Extra != nil {
-		copied.Extra = make(map[string]authenticationv1.ExtraValue, len(userInfo.Extra))
-		for key, values := range userInfo.Extra {
-			copied.Extra[key] = append(authenticationv1.ExtraValue(nil), values...)
-		}
-	}
-	return copied
 }
 
 func authorizationExtra(extra map[string]authenticationv1.ExtraValue) map[string]authorizationv1.ExtraValue {
