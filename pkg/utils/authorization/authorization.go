@@ -49,19 +49,15 @@ type Result struct {
 	Err     error
 }
 
-type resultError struct {
-	result Result
-}
-
-func (e *resultError) Error() string {
-	if e.result.Err != nil {
-		return e.result.Err.Error()
+func (r *Result) Error() string {
+	if r.Err != nil {
+		return r.Err.Error()
 	}
-	return e.result.Reason
+	return r.Reason
 }
 
-func (e *resultError) Unwrap() error {
-	return e.result.Err
+func (r *Result) Unwrap() error {
+	return r.Err
 }
 
 // Reviewer resolves resource kinds and reviews selected-resource access.
@@ -136,13 +132,13 @@ func (r *Reviewer) Authorize(ctx context.Context, userInfo authenticationv1.User
 			if result.Allowed {
 				return nil
 			}
-			return &resultError{result: result}
+			return &result
 		})
 	}
 	if err := reviews.Wait(); err != nil {
-		var resultErr *resultError
-		if errors.As(err, &resultErr) {
-			return resultErr.result
+		var result *Result
+		if errors.As(err, &result) {
+			return *result
 		}
 		return Result{Err: err}
 	}
