@@ -70,7 +70,6 @@ func TestHandleSelectedResourceAuthorization(t *testing.T) {
 		modify     func(*placementv1beta1.ResourcePlacement)
 		denyVerb   string
 		apiError   bool
-		readError  bool
 		invalid    bool
 		wantCode   int32
 		wantChecks []string
@@ -79,26 +78,23 @@ func TestHandleSelectedResourceAuthorization(t *testing.T) {
 		{name: "label needs list without get", selectors: []placementv1beta1.ResourceSelectorTerm{labeled}, denyVerb: getVerb, wantChecks: []string{listConfigMapsCheck}},
 		{name: "all of kind needs list without get", selectors: []placementv1beta1.ResourceSelectorTerm{all}, denyVerb: getVerb, wantChecks: []string{listConfigMapsCheck}},
 		{name: "overlapping selectors", selectors: []placementv1beta1.ResourceSelectorTerm{named, all, labeled}, wantChecks: []string{listConfigMapsCheck, getConfigMapCheck}},
-		{name: "unchanged spec skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, readError: true},
+		{name: "unchanged spec skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true},
 		{name: "spec update reauthorizes unchanged selectors", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, changeSpec: true, wantChecks: []string{getConfigMapCheck}},
-		{name: "label update skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, readError: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Labels = map[string]string{"updated": "true"} }},
-		{name: "annotation update skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, readError: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Annotations = map[string]string{"updated": "true"} }},
-		{name: "active finalizer removal skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, readError: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Finalizers = nil }},
-		{name: "active finalizer addition skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, readError: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Finalizers = append(p.Finalizers, "another") }},
+		{name: "label update skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Labels = map[string]string{"updated": "true"} }},
+		{name: "annotation update skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Annotations = map[string]string{"updated": "true"} }},
+		{name: "active finalizer removal skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Finalizers = nil }},
+		{name: "active finalizer addition skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, modify: func(p *placementv1beta1.ResourcePlacement) { p.Finalizers = append(p.Finalizers, "another") }},
 		{name: "get denied", selectors: []placementv1beta1.ResourceSelectorTerm{named}, denyVerb: getVerb, wantCode: http.StatusForbidden},
 		{name: "list denied", selectors: []placementv1beta1.ResourceSelectorTerm{all}, denyVerb: "list", wantCode: http.StatusForbidden},
 		{name: "spec update denied", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, changeSpec: true, denyVerb: getVerb, wantCode: http.StatusForbidden},
 		{name: "spec update SAR failure", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, changeSpec: true, apiError: true, wantCode: http.StatusInternalServerError},
-		{name: "spec update does not read source objects", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, changeSpec: true, readError: true, wantChecks: []string{getConfigMapCheck}},
 		{name: "SAR failure", selectors: []placementv1beta1.ResourceSelectorTerm{named}, apiError: true, wantCode: http.StatusInternalServerError},
-		{name: "named selection does not read source objects", selectors: []placementv1beta1.ResourceSelectorTerm{named}, readError: true, wantChecks: []string{getConfigMapCheck}},
-		{name: "enumeration does not read source collections", selectors: []placementv1beta1.ResourceSelectorTerm{all}, readError: true, wantChecks: []string{listConfigMapsCheck}},
-		{name: "finalizer cleanup skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, cleanup: true, readError: true},
-		{name: "invalid placement cleanup skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, cleanup: true, readError: true, invalid: true},
-		{name: "invalid deleting placement retains existing allowance without finalizer removal", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true, readError: true, invalid: true},
-		{name: "invalid deleting placement retains existing allowance for spec changes", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true, changeSpec: true, readError: true, invalid: true},
+		{name: "finalizer cleanup skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, cleanup: true},
+		{name: "invalid placement cleanup skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, cleanup: true, invalid: true},
+		{name: "invalid deleting placement retains existing allowance without finalizer removal", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true, invalid: true},
+		{name: "invalid deleting placement retains existing allowance for spec changes", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true, changeSpec: true, invalid: true},
 		{name: "invalid nondeleting placement remains denied", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, invalid: true, wantCode: http.StatusForbidden},
-		{name: "valid deleting placement with unchanged spec skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true, readError: true},
+		{name: "valid deleting placement with unchanged spec skips authorization", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, deleting: true},
 		{name: "spec changes cannot use cleanup bypass", selectors: []placementv1beta1.ResourceSelectorTerm{named}, update: true, cleanup: true, changeSpec: true, denyVerb: getVerb, wantCode: http.StatusForbidden},
 	}
 	oldInformer, oldMapper := validator.ResourceInformer, validator.RestMapper
@@ -106,9 +102,6 @@ func TestHandleSelectedResourceAuthorization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
-			if err := corev1.AddToScheme(scheme); err != nil {
-				t.Fatal(err)
-			}
 			if err := placementv1beta1.AddToScheme(scheme); err != nil {
 				t.Fatal(err)
 			}
@@ -116,32 +109,20 @@ func TestHandleSelectedResourceAuthorization(t *testing.T) {
 			mapper.Add(corev1.SchemeGroupVersion.WithKind("ConfigMap"), meta.RESTScopeNamespace)
 			validator.RestMapper = mapper
 			validator.ResourceInformer = &testinformer.FakeManager{APIResources: map[schema.GroupVersionKind]bool{corev1.SchemeGroupVersion.WithKind("ConfigMap"): false}, IsClusterScopedResource: true}
-			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "config", Namespace: testNamespace, Labels: map[string]string{"selected": "yes"}}},
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "outside", Namespace: "other"}},
-			).WithInterceptorFuncs(interceptor.Funcs{
-				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-					if tt.readError {
-						return errors.New("live get unavailable")
-					}
-					return c.Get(ctx, key, obj, opts...)
-				},
-				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-					if tt.readError {
-						return errors.New("live list unavailable")
-					}
-					return c.List(ctx, list, opts...)
-				},
-			}).Build()
-			user := authenticationv1.UserInfo{Username: "updating-user"}
+			user := authenticationv1.UserInfo{Username: "updating-user", UID: "uid", Groups: []string{"developers"}, Extra: map[string]authenticationv1.ExtraValue{"tenant": {testNamespace}}}
 			var checks []string
 			sarClient := fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
 				review, ok := obj.(*authorizationv1.SubjectAccessReview)
 				if !ok {
 					return fmt.Errorf("Create() object = %T, want SubjectAccessReview", obj)
 				}
-				if review.Spec.User != user.Username {
-					t.Errorf("Handle() reviewer user = %q, want %q", review.Spec.User, user.Username)
+				wantSpec := authorizationv1.SubjectAccessReviewSpec{
+					User: user.Username, UID: user.UID, Groups: user.Groups,
+					Extra:              map[string]authorizationv1.ExtraValue{"tenant": {testNamespace}},
+					ResourceAttributes: review.Spec.ResourceAttributes,
+				}
+				if diff := cmp.Diff(wantSpec, review.Spec); diff != "" {
+					t.Errorf("Handle() SubjectAccessReview mismatch (-want +got):\n%s", diff)
 				}
 				attr := review.Spec.ResourceAttributes
 				checks = append(checks, fmt.Sprintf("%s %s %s/%s", attr.Verb, attr.Resource, attr.Namespace, attr.Name))
@@ -156,7 +137,7 @@ func TestHandleSelectedResourceAuthorization(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			authorizer, err := authorization.NewPlacementAuthorizer(reader, mapper, reviewer, validator.ResourceInformer, resourceeligibility.AllowAll(mapper))
+			authorizer, err := authorization.NewResourcePlacementAuthorizer(mapper, reviewer, resourceeligibility.AllowAll(mapper))
 			if err != nil {
 				t.Fatal(err)
 			}

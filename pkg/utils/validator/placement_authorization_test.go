@@ -57,7 +57,7 @@ func TestHandlePlacementValidationAuthorizationDecision(t *testing.T) {
 		{
 			name:   "allowed",
 			result: authorization.Result{Decision: authorization.DecisionAllowed},
-			want:   outcome{Allowed: true, Code: http.StatusOK, Message: fmt.Sprintf(AllowModifyFmt, "CRP")},
+			want:   outcome{Allowed: true, Code: http.StatusOK, Message: fmt.Sprintf(AllowModifyFmt, "RP")},
 		},
 		{
 			name:   "denied",
@@ -110,9 +110,9 @@ func TestHandlePlacementValidationAuthorizationDecision(t *testing.T) {
 				context.Background(),
 				admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{Operation: admissionv1.Create}},
 				nil,
-				"CRP",
+				"RP",
 				func(admission.Request, webhook.AdmissionDecoder) (placementv1beta1.PlacementObj, error) {
-					return &placementv1beta1.ClusterResourcePlacement{}, nil
+					return &placementv1beta1.ResourcePlacement{}, nil
 				},
 				nil,
 				func(placementv1beta1.PlacementObj) error { return nil },

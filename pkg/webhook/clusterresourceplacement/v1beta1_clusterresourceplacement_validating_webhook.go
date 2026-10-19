@@ -36,14 +36,13 @@ var (
 )
 
 type clusterResourcePlacementValidator struct {
-	decoder    webhook.AdmissionDecoder
-	authorizer validator.PlacementAuthorizer
+	decoder webhook.AdmissionDecoder
 }
 
 // Add registers the webhook for K8s built-in object types.
 func Add(mgr manager.Manager) error {
 	hookServer := mgr.GetWebhookServer()
-	hookServer.Register(ValidationPath, &webhook.Admission{Handler: &clusterResourcePlacementValidator{decoder: admission.NewDecoder(mgr.GetScheme())}})
+	hookServer.Register(ValidationPath, &webhook.Admission{Handler: &clusterResourcePlacementValidator{admission.NewDecoder(mgr.GetScheme())}})
 	return nil
 }
 
@@ -66,5 +65,5 @@ func (v *clusterResourcePlacementValidator) Handle(ctx context.Context, req admi
 		// validateFunc
 		func(obj placementv1beta1.PlacementObj) error {
 			return validator.ValidateClusterResourcePlacement(obj.(*placementv1beta1.ClusterResourcePlacement))
-		}, v.authorizer)
+		}, nil)
 }
