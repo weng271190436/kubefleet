@@ -91,12 +91,15 @@ func TestResourcePlacementAuthorizeUninitialized(t *testing.T) {
 
 func TestResourcePlacementAuthorizeSelections(t *testing.T) {
 	named := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.ConfigMapKind, Name: rpSource}
-	all := named
-	all.Name = ""
-	labeled := all
-	labeled.LabelSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": "selected"}}
-	emptyLabels := all
-	emptyLabels.LabelSelector = &metav1.LabelSelector{}
+	all := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.ConfigMapKind}
+	labeled := placementv1beta1.ResourceSelectorTerm{
+		Version: "v1", Kind: utils.ConfigMapKind,
+		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "selected"}},
+	}
+	emptyLabels := placementv1beta1.ResourceSelectorTerm{
+		Version: "v1", Kind: utils.ConfigMapKind,
+		LabelSelector: &metav1.LabelSelector{},
+	}
 	get := resourceAttributes(corev1.SchemeGroupVersion.WithResource("configmaps"), "get", rpNamespace, rpSource)
 	list := resourceAttributes(corev1.SchemeGroupVersion.WithResource("configmaps"), "list", rpNamespace, "")
 	tests := []struct {

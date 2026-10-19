@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
+	"github.com/kubefleet-dev/kubefleet/pkg/utils"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils/authorization"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils/resourceeligibility"
 	"github.com/kubefleet-dev/kubefleet/pkg/utils/validator"
@@ -55,11 +56,12 @@ const (
 )
 
 func TestHandleSelectedResourceAuthorization(t *testing.T) {
-	named := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: "ConfigMap", Name: "config"}
-	all := named
-	all.Name = ""
-	labeled := all
-	labeled.LabelSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"selected": "yes"}}
+	named := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.ConfigMapKind, Name: "config"}
+	all := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.ConfigMapKind}
+	labeled := placementv1beta1.ResourceSelectorTerm{
+		Version: "v1", Kind: utils.ConfigMapKind,
+		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"selected": "yes"}},
+	}
 	tests := []struct {
 		name       string
 		selectors  []placementv1beta1.ResourceSelectorTerm
