@@ -64,6 +64,7 @@
 
 - [ ] Run formatting and focused authorization, webhook, and option tests.
 - [ ] Run the smallest relevant integration tests using real Kubernetes RBAC authorization.
+- [ ] Add focused RP webhook authorization wiring and update-gating coverage.
 - [ ] Run `make reviewable` before submission.
 - [ ] Update this breadcrumb with implementation details, changed files, and validation results.
 - **Success criterion:** Focused and repository-required checks pass with no authorization bypass or unrelated behavior regression.
@@ -107,8 +108,10 @@ is preserved in pushed commit `e640d9b2`; the follow-up slice retains RP only.
 - Add an optional RP webhook authorizer through shared placement validation.
   Authorize creates and spec-changing updates only. Unchanged-spec updates still
   run existing validation, and the old invalid-placement deletion exception is
-  unchanged. Tests cover metadata/finalizer updates, identity, scope, denials,
-  SAR errors, and admission decision mapping.
+  unchanged. Authorizer unit tests cover scope, selectors, denials, and SAR errors;
+  shared validator tests cover admission decision mapping. The dedicated RP
+  webhook authorization test file was removed at the user's request; its wiring
+  and update-gating coverage is deferred.
 - Defer CRP authorization and its tests. Its handler passes nil to the shared
   authorization parameter, preserving existing behavior. The controller's resource
   selector resolver is unchanged.
