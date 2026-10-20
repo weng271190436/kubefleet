@@ -121,7 +121,32 @@ func (a *PlacementAuthorizer) resolveNonNamespaceSelectors(selectors []placement
 	return attributes, nil
 }
 
-func (a *PlacementAuthorizer) resolveNamespaceSelector(ctx context.Context, selector placementv1beta1.ResourceSelectorTerm) ([]authorizationv1.ResourceAttributes, error) {
+func (a *PlacementAuthorizer) namespaceChecksForPlacement(placement placementv1beta1.PlacementObj) ([]authorizationv1.ResourceAttributes, error) {
+	crp, ok := placement.(*placementv1beta1.ClusterResourcePlacement)
+	if !ok {
+		return nil, nil
+	}
+	if crp == nil {
+		return nil, errors.New("cluster resource placement must not be nil")
+	}
+	if crp.Namespace != "" {
+		return nil, errors.New("cluster resource placement must not specify a namespace")
+	}
+	var attributes []authorizationv1.ResourceAttributes
+	for _, selector := range crp.Spec.ResourceSelectors {
+		if selectorGVK(selector) != utils.NamespaceGVK {
+			continue
+		}
+		checks, err := a.namespaceSelectorAttributes(selector)
+		if err != nil {
+			return nil, err
+		}
+		attributes = append(attributes, checks...)
+	}
+	return attributes, nil
+}
+
+func (a *PlacementAuthorizer) namespaceSelectorAttributes(selector placementv1beta1.ResourceSelectorTerm) ([]authorizationv1.ResourceAttributes, error) {
 	if selector.SelectionScope == placementv1beta1.NamespaceWithResourceSelectors && (selector.Name == "" || selector.LabelSelector != nil) {
 		return nil, errors.New("NamespaceWithResourceSelectors requires a namespace selected by name")
 	}
@@ -136,7 +161,17 @@ func (a *PlacementAuthorizer) resolveNamespaceSelector(ctx context.Context, sele
 	if err != nil {
 		return nil, err
 	}
-	attributes := []authorizationv1.ResourceAttributes{check}
+	return []authorizationv1.ResourceAttributes{check}, nil
+}
+
+func (a *PlacementAuthorizer) resolveNamespaceSelector(ctx context.Context, selector placementv1beta1.ResourceSelectorTerm) ([]authorizationv1.ResourceAttributes, error) {
+	attributes, err := a.namespaceSelectorAttributes(selector)
+	if err != nil {
+		return nil, err
+	}
+	if len(attributes) == 0 {
+		return nil, nil
+	}
 	switch selector.SelectionScope {
 	case placementv1beta1.NamespaceOnly:
 		return attributes, nil

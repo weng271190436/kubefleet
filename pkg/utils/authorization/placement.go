@@ -73,6 +73,17 @@ func (a *PlacementAuthorizer) Authorize(ctx context.Context, user authentication
 	if a == nil || a.restMapper == nil || a.reviewer == nil || a.resourceEligibilityChecker == nil || a.namespaceReader == nil || a.namespacedResources == nil {
 		return Result{Decision: DecisionIndeterminate, Err: fmt.Errorf("placement authorization dependencies are incomplete")}
 	}
+	// Check Namespace access before resolution can reveal names or existence.
+	namespaceChecks, err := a.namespaceChecksForPlacement(placement)
+	if err != nil {
+		return Result{Decision: DecisionIndeterminate, Err: err}
+	}
+	if len(namespaceChecks) != 0 {
+		result := a.reviewer.Authorize(ctx, user, namespaceChecks...)
+		if result.Decision != DecisionAllowed {
+			return result
+		}
+	}
 	attributes, err := a.resolve(ctx, placement)
 	if err != nil {
 		return Result{Decision: DecisionIndeterminate, Err: err}

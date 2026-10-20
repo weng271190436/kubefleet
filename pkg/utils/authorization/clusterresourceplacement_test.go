@@ -209,7 +209,14 @@ func TestClusterResourcePlacementAuthorizeSelections(t *testing.T) {
 			if diff := cmp.Diff(Result{Decision: DecisionAllowed}, result); diff != "" {
 				t.Fatalf("Authorize() mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b authorizationv1.ResourceAttributes) bool { return fmt.Sprint(a) < fmt.Sprint(b) })); diff != "" {
+			want := append([]authorizationv1.ResourceAttributes(nil), tt.want...)
+			// Namespace checks run in both the preflight and the full batch.
+			for _, check := range tt.want {
+				if check.Group == utils.NamespaceGVR.Group && check.Resource == utils.NamespaceGVR.Resource && check.Namespace == "" {
+					want = append(want, check)
+				}
+			}
+			if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b authorizationv1.ResourceAttributes) bool { return fmt.Sprint(a) < fmt.Sprint(b) })); diff != "" {
 				t.Errorf("Authorize() checks mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -268,11 +275,107 @@ func TestClusterResourcePlacementNamespaceOnlyDoesNotReadNamespaces(t *testing.T
 			if diff := cmp.Diff(Result{Decision: DecisionAllowed}, result); diff != "" {
 				t.Errorf("Authorize() mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff([]authorizationv1.ResourceAttributes{tt.want}, got); diff != "" {
+			if diff := cmp.Diff([]authorizationv1.ResourceAttributes{tt.want, tt.want}, got); diff != "" {
 				t.Errorf("Authorize() checks mismatch (-want +got):\n%s", diff)
 			}
 			if readerCalls != 0 {
 				t.Errorf("Authorize() namespace reader calls = %d, want 0", readerCalls)
+			}
+		})
+	}
+}
+
+func TestClusterResourcePlacementNamespacePreflightStopsResolution(t *testing.T) {
+	const denialReason = "namespace access denied"
+	namedExpansion := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpNamespaceA, SelectionScope: placementv1beta1.NamespaceWithResources}
+	missingExpansion := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpMissingNS, SelectionScope: placementv1beta1.NamespaceWithResources}
+	labeledExpansion := placementv1beta1.ResourceSelectorTerm{
+		Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceWithResources,
+		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{crpLabel: crpLabelValue}},
+	}
+	allExpansion := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceWithResources}
+	selectiveNamespace := placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpNamespaceA, SelectionScope: placementv1beta1.NamespaceWithResourceSelectors}
+	apiErr := errors.New("namespace authorization unavailable")
+	tests := []struct {
+		name         string
+		selector     placementv1beta1.ResourceSelectorTerm
+		reviewStatus authorizationv1.SubjectAccessReviewStatus
+		reviewErr    error
+		wantDecision Decision
+	}{
+		{name: "named expansion denied", selector: namedExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: denialReason}, wantDecision: DecisionDenied},
+		{name: "named expansion no opinion", selector: namedExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{}, wantDecision: DecisionDenied},
+		{name: "named expansion API error", selector: namedExpansion, reviewErr: apiErr, wantDecision: DecisionIndeterminate},
+		{name: "named expansion evaluation error", selector: namedExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{EvaluationError: apiErr.Error()}, wantDecision: DecisionIndeterminate},
+		{name: "missing named expansion denied", selector: missingExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: denialReason}, wantDecision: DecisionDenied},
+		{name: "missing named expansion no opinion", selector: missingExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{}, wantDecision: DecisionDenied},
+		{name: "missing named expansion API error", selector: missingExpansion, reviewErr: apiErr, wantDecision: DecisionIndeterminate},
+		{name: "missing named expansion evaluation error", selector: missingExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{EvaluationError: apiErr.Error()}, wantDecision: DecisionIndeterminate},
+		{name: "labeled expansion denied", selector: labeledExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: denialReason}, wantDecision: DecisionDenied},
+		{name: "labeled expansion no opinion", selector: labeledExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{}, wantDecision: DecisionDenied},
+		{name: "labeled expansion API error", selector: labeledExpansion, reviewErr: apiErr, wantDecision: DecisionIndeterminate},
+		{name: "labeled expansion evaluation error", selector: labeledExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{EvaluationError: apiErr.Error()}, wantDecision: DecisionIndeterminate},
+		{name: "all namespaces expansion denied", selector: allExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: denialReason}, wantDecision: DecisionDenied},
+		{name: "all namespaces expansion no opinion", selector: allExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{}, wantDecision: DecisionDenied},
+		{name: "all namespaces expansion API error", selector: allExpansion, reviewErr: apiErr, wantDecision: DecisionIndeterminate},
+		{name: "all namespaces expansion evaluation error", selector: allExpansion, reviewStatus: authorizationv1.SubjectAccessReviewStatus{EvaluationError: apiErr.Error()}, wantDecision: DecisionIndeterminate},
+		{name: "selective namespace denied", selector: selectiveNamespace, reviewStatus: authorizationv1.SubjectAccessReviewStatus{Denied: true, Reason: denialReason}, wantDecision: DecisionDenied},
+		{name: "selective namespace no opinion", selector: selectiveNamespace, reviewStatus: authorizationv1.SubjectAccessReviewStatus{}, wantDecision: DecisionDenied},
+		{name: "selective namespace API error", selector: selectiveNamespace, reviewErr: apiErr, wantDecision: DecisionIndeterminate},
+		{name: "selective namespace evaluation error", selector: selectiveNamespace, reviewStatus: authorizationv1.SubjectAccessReviewStatus{EvaluationError: apiErr.Error()}, wantDecision: DecisionIndeterminate},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var reviews []authorizationv1.ResourceAttributes
+			a, _ := newClusterPlacementTestAuthorizer(t, &fakeSubjectAccessReviewClient{create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+				if review.Spec.User != rpRequester {
+					t.Errorf("Authorize() review user = %q, want %q", review.Spec.User, rpRequester)
+				}
+				reviews = append(reviews, *review.Spec.ResourceAttributes)
+				review.Status = tt.reviewStatus
+				return tt.reviewErr
+			}})
+			readerCalls := 0
+			readErr := errors.New("unexpected namespace read before authorization")
+			a.namespaceReader = fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+					readerCalls++
+					return readErr
+				},
+				List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+					readerCalls++
+					return readErr
+				},
+			}).Build()
+			p := &placementv1beta1.ClusterResourcePlacement{Spec: placementv1beta1.PlacementSpec{ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{tt.selector}}}
+			result := a.Authorize(context.Background(), authenticationv1.UserInfo{Username: rpRequester}, p)
+			if result.Decision != tt.wantDecision {
+				t.Errorf("Authorize() decision = %s, want %s", result.Decision, tt.wantDecision)
+			}
+			if tt.reviewErr != nil && !errors.Is(result.Err, tt.reviewErr) {
+				t.Errorf("Authorize() error = %v, want error containing %v", result.Err, tt.reviewErr)
+			}
+			verb := crpList
+			if tt.selector.Name != "" {
+				verb = crpGet
+			}
+			wantReviews := []authorizationv1.ResourceAttributes{resourceAttributes(utils.NamespaceGVR, verb, "", tt.selector.Name)}
+			if diff := cmp.Diff(wantReviews, reviews); diff != "" {
+				t.Errorf("Authorize() reviews mismatch (-want +got):\n%s", diff)
+			}
+			if readerCalls != 0 {
+				t.Errorf("Authorize() namespace reader calls = %d, want 0", readerCalls)
+			}
+			if tt.selector.Name == "" {
+				message := result.DenialReason
+				if result.Err != nil {
+					message += result.Err.Error()
+				}
+				for _, namespace := range []string{crpNamespaceA, crpNamespaceB, crpDeletingNS} {
+					if strings.Contains(message, namespace) {
+						t.Errorf("Authorize() response %q disclosed namespace %q", message, namespace)
+					}
+				}
 			}
 		})
 	}

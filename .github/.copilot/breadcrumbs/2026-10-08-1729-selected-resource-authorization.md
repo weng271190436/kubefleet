@@ -142,6 +142,13 @@ remain Phase 4.
   Expansion and selective modes resolve Namespaces live, filter deleting objects,
   and enforce content-namespace eligibility; NamespaceOnly does not apply those
   content exclusions, matching the controller.
+- Before any CRP Namespace reads, authorize all Namespace get/list checks derived
+  from selector metadata. Denied, no-opinion, and indeterminate Namespace reviews
+  stop resolution immediately, so responses cannot disclose discovered Namespace
+  names or existence through lookup errors or expanded denial reasons. After an
+  allowed preflight, resolve expansion and authorize the full batch. Namespace
+  checks are intentionally repeated in that batch to keep the implementation
+  simple; no cross-phase filtering or deduplication optimization is used.
 - Expansion builds list checks for each eligible tracked namespaced resource type
   in each active selected Namespace. Ordinary resource checks remain metadata-only:
   get by name or list for label/all-of-kind, with no per-object get checks.
@@ -157,6 +164,10 @@ remain Phase 4.
   label, all-of-kind, and nonexistent named selections. Namespace read failures
   are tested in expansion modes, and non-NoMatch inventory mapper errors remain
   explicit failures.
+  Preflight regressions assert zero Namespace reads and no expanded reviews on
+  Namespace denial, no opinion, API failure, or evaluation error, including named
+  missing Namespaces, label/all selections, and selective mode. Label/all failure
+  responses must not contain discovered Namespace names.
 - No controller resolver, shared validation, or webhook code changed. No new
   webhook test scaffold or production enforcement wiring is included.
 
