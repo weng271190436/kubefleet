@@ -137,17 +137,26 @@ remain Phase 4.
   NamespaceOnly, NamespaceWithResources (including default), and
   NamespaceWithResourceSelectors have explicit separate cases. Selective mode
   requires exactly one named active Namespace and cannot mix Namespace selectors.
-- Namespace selection uses live typed reads, filters deleting Namespaces, and
-  derives Namespace get/list checks from the selector. NamespaceOnly authorizes
-  Namespace metadata without applying content-namespace exclusions, matching the
-  controller. Expansion and selective modes retain namespace eligibility checks.
+- NamespaceOnly builds get/list checks without any Namespace reader calls or
+  existence checks. Mapping, kind eligibility, and selector validation still run.
+  Expansion and selective modes resolve Namespaces live, filter deleting objects,
+  and enforce content-namespace eligibility; NamespaceOnly does not apply those
+  content exclusions, matching the controller.
 - Expansion builds list checks for each eligible tracked namespaced resource type
   in each active selected Namespace. Ordinary resource checks remain metadata-only:
   get by name or list for label/all-of-kind, with no per-object get checks.
+- Namespace expansion skips inventory entries whose kinds no longer map
+  (`NoMatch`), with a debug log, matching the controller's removed-CRD handling.
+  Other mapper/eligibility failures and explicit unknown selectors still fail
+  closed. Tests retain valid checks before and after a stale inventory entry.
 - Added focused tests for exact attributes, all modes, multiple Namespaces,
   ordering, overlaps, exclusions, missing/deleting Namespaces, malformed selectors,
   mapping/inventory/API failures, denials, and fresh Namespace reads using the
   current requester. Tests fail on any non-Namespace reader operation.
+  NamespaceOnly tests additionally require exactly zero reader calls for named,
+  label, all-of-kind, and nonexistent named selections. Namespace read failures
+  are tested in expansion modes, and non-NoMatch inventory mapper errors remain
+  explicit failures.
 - No controller resolver, shared validation, or webhook code changed. No new
   webhook test scaffold or production enforcement wiring is included.
 

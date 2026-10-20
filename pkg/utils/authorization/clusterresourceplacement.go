@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	placementv1beta1 "github.com/kubefleet-dev/kubefleet/apis/placement/v1beta1"
@@ -135,15 +136,15 @@ func (a *PlacementAuthorizer) resolveNamespaceSelector(ctx context.Context, sele
 	if err != nil {
 		return nil, err
 	}
-	namespaces, err := a.selectNamespaces(ctx, selector)
-	if err != nil {
-		return nil, err
-	}
 	attributes := []authorizationv1.ResourceAttributes{check}
 	switch selector.SelectionScope {
 	case placementv1beta1.NamespaceOnly:
 		return attributes, nil
 	case "", placementv1beta1.NamespaceWithResources:
+		namespaces, err := a.selectNamespaces(ctx, selector)
+		if err != nil {
+			return nil, err
+		}
 		for i := range namespaces {
 			namespace := namespaces[i].Name
 			if !a.resourceEligibilityChecker.AllowsNamespace(namespace) {
@@ -157,6 +158,10 @@ func (a *PlacementAuthorizer) resolveNamespaceSelector(ctx context.Context, sele
 		}
 		return attributes, nil
 	case placementv1beta1.NamespaceWithResourceSelectors:
+		namespaces, err := a.selectNamespaces(ctx, selector)
+		if err != nil {
+			return nil, err
+		}
 		if len(namespaces) != 1 {
 			return nil, errors.New("NamespaceWithResourceSelectors requires exactly one active namespace")
 		}
@@ -205,12 +210,16 @@ func (a *PlacementAuthorizer) expandNamespace(namespace string) ([]authorization
 	var attributes []authorizationv1.ResourceAttributes
 	for _, gvr := range a.namespacedResources.GetNameSpaceScopedResources() {
 		eligible, err := a.resourceEligibilityChecker.AllowsGVR(gvr)
-		if err != nil {
+		switch {
+		case meta.IsNoMatchError(err):
+			klog.V(2).InfoS("Skip namespace expansion authorization for a resource with no registered kind", "GVR", gvr.String())
+			continue
+		case err != nil:
 			return nil, fmt.Errorf("failed to determine eligibility for %s: %w", gvr, err)
+		case !eligible:
+			continue
 		}
-		if eligible {
-			attributes = append(attributes, resourceAttributes(gvr, "list", namespace, ""))
-		}
+		attributes = append(attributes, resourceAttributes(gvr, "list", namespace, ""))
 	}
 	return attributes, nil
 }

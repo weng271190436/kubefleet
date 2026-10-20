@@ -45,6 +45,7 @@ const (
 	crpNamespaceA = "team-a"
 	crpNamespaceB = "team-b"
 	crpDeletingNS = "deleting"
+	crpMissingNS  = "missing"
 	crpSource     = "source"
 	crpLabel      = "env"
 	crpLabelValue = "production"
@@ -61,6 +62,15 @@ type crpResourceInventory []schema.GroupVersionResource
 
 func (i crpResourceInventory) GetNameSpaceScopedResources() []schema.GroupVersionResource {
 	return i
+}
+
+type crpErrorRESTMapper struct {
+	meta.RESTMapper
+	err error
+}
+
+func (m crpErrorRESTMapper) KindsFor(schema.GroupVersionResource) ([]schema.GroupVersionKind, error) {
+	return nil, m.err
 }
 
 func newClusterPlacementTestAuthorizer(t *testing.T, sarClient SubjectAccessReviewClient) (*PlacementAuthorizer, client.Client) {
@@ -161,6 +171,11 @@ func TestClusterResourcePlacementAuthorizeSelections(t *testing.T) {
 		{name: "ineligible Namespace kind skipped", selectors: []placementv1beta1.ResourceSelectorTerm{nsOnly}, exclude: []schema.GroupVersionKind{utils.NamespaceGVK}},
 		{name: "ineligible expanded type skipped", selectors: []placementv1beta1.ResourceSelectorTerm{withResources}, exclude: []schema.GroupVersionKind{corev1.SchemeGroupVersion.WithKind(crpSecretKind)}, want: []authorizationv1.ResourceAttributes{getNS, listCMA}},
 		{name: "duplicate inventory entries deduplicate reviews", selectors: []placementv1beta1.ResourceSelectorTerm{withResources}, inventory: crpResourceInventory{corev1.SchemeGroupVersion.WithResource(crpConfigMaps), corev1.SchemeGroupVersion.WithResource(crpConfigMaps)}, want: []authorizationv1.ResourceAttributes{getNS, listCMA}},
+		{name: "removed inventory type skipped without dropping valid types", selectors: []placementv1beta1.ResourceSelectorTerm{withResources}, inventory: crpResourceInventory{
+			corev1.SchemeGroupVersion.WithResource(crpConfigMaps),
+			{Group: "removed.example.io", Version: "v1", Resource: "widgets"},
+			corev1.SchemeGroupVersion.WithResource(crpSecrets),
+		}, want: []authorizationv1.ResourceAttributes{getNS, listCMA, listSecretA}},
 		{name: "RP still supported by configured authorizer", rp: true, selectors: []placementv1beta1.ResourceSelectorTerm{configMap}, want: []authorizationv1.ResourceAttributes{getCM}},
 	}
 	for _, tt := range tests {
@@ -196,6 +211,68 @@ func TestClusterResourcePlacementAuthorizeSelections(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.want, got, cmpopts.SortSlices(func(a, b authorizationv1.ResourceAttributes) bool { return fmt.Sprint(a) < fmt.Sprint(b) })); diff != "" {
 				t.Errorf("Authorize() checks mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestClusterResourcePlacementNamespaceOnlyDoesNotReadNamespaces(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector placementv1beta1.ResourceSelectorTerm
+		want     authorizationv1.ResourceAttributes
+	}{
+		{
+			name:     "named",
+			selector: placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpNamespaceA, SelectionScope: placementv1beta1.NamespaceOnly},
+			want:     resourceAttributes(utils.NamespaceGVR, crpGet, "", crpNamespaceA),
+		},
+		{
+			name:     "named missing namespace",
+			selector: placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpMissingNS, SelectionScope: placementv1beta1.NamespaceOnly},
+			want:     resourceAttributes(utils.NamespaceGVR, crpGet, "", crpMissingNS),
+		},
+		{
+			name:     "labeled",
+			selector: placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceOnly, LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{crpLabel: crpLabelValue}}},
+			want:     resourceAttributes(utils.NamespaceGVR, crpList, "", ""),
+		},
+		{
+			name:     "all",
+			selector: placementv1beta1.ResourceSelectorTerm{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceOnly},
+			want:     resourceAttributes(utils.NamespaceGVR, crpList, "", ""),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []authorizationv1.ResourceAttributes
+			a, _ := newClusterPlacementTestAuthorizer(t, &fakeSubjectAccessReviewClient{create: func(_ context.Context, review *authorizationv1.SubjectAccessReview) error {
+				got = append(got, *review.Spec.ResourceAttributes)
+				review.Status.Allowed = true
+				return nil
+			}})
+			readerCalls := 0
+			readErr := errors.New("NamespaceOnly must not read namespaces")
+			a.namespaceReader = fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+					readerCalls++
+					return readErr
+				},
+				List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+					readerCalls++
+					return readErr
+				},
+			}).Build()
+			p := &placementv1beta1.ClusterResourcePlacement{Spec: placementv1beta1.PlacementSpec{ResourceSelectors: []placementv1beta1.ResourceSelectorTerm{tt.selector}}}
+			result := a.Authorize(context.Background(), authenticationv1.UserInfo{Username: rpRequester}, p)
+			if diff := cmp.Diff(Result{Decision: DecisionAllowed}, result); diff != "" {
+				t.Errorf("Authorize() mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff([]authorizationv1.ResourceAttributes{tt.want}, got); diff != "" {
+				t.Errorf("Authorize() checks mismatch (-want +got):\n%s", diff)
+			}
+			if readerCalls != 0 {
+				t.Errorf("Authorize() namespace reader calls = %d, want 0", readerCalls)
 			}
 		})
 	}
@@ -264,7 +341,7 @@ func TestClusterResourcePlacementAuthorizeFailures(t *testing.T) {
 		{name: "selective namespace with label", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpNamespaceA, SelectionScope: placementv1beta1.NamespaceWithResourceSelectors, LabelSelector: &metav1.LabelSelector{}}}, wantErr: "selected by name"},
 		{name: "multiple selective namespace selectors", selectors: []placementv1beta1.ResourceSelectorTerm{selective, selective}, wantErr: "exactly one namespace selector"},
 		{name: "mixing namespace modes with selective namespace", selectors: []placementv1beta1.ResourceSelectorTerm{ns, selective}, wantErr: "exactly one namespace selector"},
-		{name: "missing namespace", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: "missing", SelectionScope: placementv1beta1.NamespaceOnly}}, wantErr: "failed to get selected namespace"},
+		{name: "missing namespace for expansion", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpMissingNS, SelectionScope: placementv1beta1.NamespaceWithResources}}, wantErr: "failed to get selected namespace"},
 		{name: "deleting selective namespace", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpDeletingNS, SelectionScope: placementv1beta1.NamespaceWithResourceSelectors}}, wantErr: "exactly one active namespace"},
 		{name: "unsupported namespace scope", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, Name: crpNamespaceA, SelectionScope: crpUnknown}}, wantErr: "unsupported namespace selection scope"},
 		{name: "invalid namespace label", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceOnly, LabelSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{Key: crpLabel, Operator: "invalid"}}}}}, wantErr: "invalid resource label selector"},
@@ -279,14 +356,15 @@ func TestClusterResourcePlacementAuthorizeFailures(t *testing.T) {
 				return errors.New("get unavailable")
 			}}).Build()
 		}, wantErr: "get unavailable"},
-		{name: "namespace list API failure", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceOnly}}, modify: func(a *PlacementAuthorizer, _ *placementv1beta1.ClusterResourcePlacement) {
+		{name: "namespace list API failure", selectors: []placementv1beta1.ResourceSelectorTerm{{Version: "v1", Kind: utils.NamespaceGVK.Kind, SelectionScope: placementv1beta1.NamespaceWithResources}}, modify: func(a *PlacementAuthorizer, _ *placementv1beta1.ClusterResourcePlacement) {
 			a.namespaceReader = fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
 				return errors.New("list unavailable")
 			}}).Build()
 		}, wantErr: "list unavailable"},
-		{name: "unresolved inventory type", selectors: []placementv1beta1.ResourceSelectorTerm{ns}, modify: func(a *PlacementAuthorizer, _ *placementv1beta1.ClusterResourcePlacement) {
-			a.namespacedResources = crpResourceInventory{corev1.SchemeGroupVersion.WithResource("unknown")}
-		}, wantErr: "failed to determine eligibility"},
+		{name: "inventory mapper failure", selectors: []placementv1beta1.ResourceSelectorTerm{ns}, modify: func(a *PlacementAuthorizer, _ *placementv1beta1.ClusterResourcePlacement) {
+			mapper := crpErrorRESTMapper{RESTMapper: a.restMapper, err: errors.New("inventory mapping unavailable")}
+			a.resourceEligibilityChecker = resourceeligibility.AllowAll(mapper)
+		}, wantErr: "inventory mapping unavailable"},
 		{name: "get denied", selectors: []placementv1beta1.ResourceSelectorTerm{role}, denyVerb: crpGet},
 		{name: "expanded list denied", selectors: []placementv1beta1.ResourceSelectorTerm{ns}, denyVerb: crpList},
 		{name: "SAR API failure", selectors: []placementv1beta1.ResourceSelectorTerm{role}, sarError: true, wantErr: "SAR unavailable"},
