@@ -34,14 +34,14 @@
 - [x] Require `get` for named selections and `list` for label/all-of-kind selections in the RP namespace.
 - [x] Authorize creates and spec-changing updates; preserve existing validation and deletion cleanup behavior.
 - [x] Add RP constructor, scope, selector, overlapping-review, identity, denial, and failure tests.
-- **Success criterion:** RP authorization is independently testable, fails closed, and does not require live object or informer dependencies.
+- **Success criterion:** RP authorization is independently testable, fails closed, and derives get/list checks without fetching source objects.
 
 ### Phase 2b: ClusterResourcePlacement authorization (follow-up slice)
 
-- [ ] Add direct cluster-scoped resource authorization.
-- [ ] Resolve selected Namespaces using live hub API reads.
-- [ ] Add NamespaceOnly, NamespaceWithResourceSelectors, and NamespaceWithResources authorization.
-- [ ] Add CRP webhook tests for namespace modes, scope, overlapping selectors, and failure cases.
+- [x] Add direct cluster-scoped resource authorization.
+- [x] Resolve selected Namespaces using live hub API reads.
+- [x] Add NamespaceOnly, NamespaceWithResourceSelectors, and NamespaceWithResources authorization.
+- [x] Add focused CRP authorizer unit tests for namespace modes, scope, overlapping selectors, eligibility, fresh reads, and failures.
 - **Success criterion:** CRP authorization follows the agreed get/list policy without expanding the RP-only review scope.
 
 ### Phase 3: Override authorization
@@ -64,7 +64,7 @@
 
 - [ ] Run formatting and focused authorization, webhook, and option tests.
 - [ ] Run the smallest relevant integration tests using real Kubernetes RBAC authorization.
-- [ ] Add focused RP webhook authorization wiring and update-gating coverage.
+- [ ] Add focused RP/CRP webhook authorization wiring and update-gating coverage.
 - [ ] Run `make reviewable` before submission.
 - [ ] Update this breadcrumb with implementation details, changed files, and validation results.
 - **Success criterion:** Focused and repository-required checks pass with no authorization bypass or unrelated behavior regression.
@@ -89,17 +89,21 @@
 ## Status
 
 Plan approved by the user. Phase 1 and the Phase 2a RP-only slice are complete on
-`feat/selected-resource-authorization-phase-2`. Phase 2b and Phases 3-5 remain.
+`feat/selected-resource-authorization-phase-2`. Phase 2b authorizer logic and unit
+tests are complete on `feat/selected-resource-authorization-crp`; Phases 3-5 remain.
 On October 19, the user requested a smaller review scope. The full implementation
 is preserved in pushed commit `e640d9b2`; the follow-up slice retains RP only.
 
+Phase 2a merged as kubefleet-dev/kubefleet#988. Phase 2b is based on that merged RP
+implementation. Production webhook wiring, SAR RBAC, and the default-on flag
+remain Phase 4.
+
 ## Phase 2a implementation details
 
-- Added `ResourcePlacementAuthorizer` and `NewResourcePlacementAuthorizer` in
-  `pkg/utils/authorization/placement.go`, with private mapper, reviewer, and
-  eligibility-checker dependencies. No reader, informer, or Namespace resolution
-  is needed. An explicit RP/CRP type switch routes RP to its typed resolver;
-  the CRP branch returns a clear not-implemented error for the follow-up slice.
+- Added the RP authorizer in `pkg/utils/authorization/placement.go`. Phase 2b
+  generalizes its type and construction for both placement APIs. RP requests
+  still need no Namespace resolution or ordinary object reads. The explicit
+  RP/CRP type switch initially deferred CRP; Phase 2b fills in that branch.
 - Build get checks for named selectors and list checks for label/all-of-kind
   selectors in the RP namespace. No source objects are fetched. Reuse the Phase 1
   reviewer's identity preservation, deduplication, and bounded concurrency.
@@ -112,11 +116,45 @@ is preserved in pushed commit `e640d9b2`; the follow-up slice retains RP only.
   shared validator tests cover admission decision mapping. The dedicated RP
   webhook authorization test file was removed at the user's request; its wiring
   and update-gating coverage is deferred.
-- Defer CRP authorization and its tests. Its handler passes nil to the shared
+- Defer CRP production wiring and webhook tests. Its handler passes nil to the shared
   authorization parameter, preserving existing behavior. The controller's resource
   selector resolver is unchanged.
 - Production registration still does not inject the RP authorizer. Default-on
   enforcement, rollout wiring, and SAR RBAC remain Phase 4.
+
+## Phase 2b implementation details
+
+- A single `NewPlacementAuthorizer` creates the shared `PlacementAuthorizer` for
+  both RP and CRP. It validates the mapper, reviewer, eligibility checker,
+  uncached Namespace reader, and resource-type inventory up front. All five are
+  required even though RP requests do not use the Namespace dependencies.
+  The RP/CRP-specific constructors and RP-specific type alias were removed.
+  One fully configured instance can later be injected into both webhooks.
+- CRP resolution first handles Namespace selectors, then other selectors.
+  NamespaceOnly, NamespaceWithResources (including default), and
+  NamespaceWithResourceSelectors have explicit separate cases. Selective mode
+  requires exactly one named active Namespace and cannot mix Namespace selectors.
+- Namespace selection uses live typed reads, filters deleting Namespaces, and
+  derives Namespace get/list checks from the selector. NamespaceOnly authorizes
+  Namespace metadata without applying content-namespace exclusions, matching the
+  controller. Expansion and selective modes retain namespace eligibility checks.
+- Expansion builds list checks for each eligible tracked namespaced resource type
+  in each active selected Namespace. Ordinary resource checks remain metadata-only:
+  get by name or list for label/all-of-kind, with no per-object get checks.
+- Added focused tests for exact attributes, all modes, multiple Namespaces,
+  ordering, overlaps, exclusions, missing/deleting Namespaces, malformed selectors,
+  mapping/inventory/API failures, denials, and fresh Namespace reads using the
+  current requester. Tests fail on any non-Namespace reader operation.
+- No controller resolver, shared validation, or webhook code changed. No new
+  webhook test scaffold or production enforcement wiring is included.
+
+## Phase 2b validation
+
+- Focused uncached race tests and `go vet` passed for authorization, validator, and
+  both placement webhook packages.
+- `go build ./cmd/hubagent/...`, new-code lint, repository `make lint` using the
+  installed v2.13.2 linter, and `git diff --check` passed.
+- Go commands use `MS_GOTOOLCHAIN_ALLOW_NON_LOCAL=1 GOTOOLCHAIN=auto`.
 
 ## Phase 2a validation
 
