@@ -39,6 +39,11 @@ type NamespacedResourceInventory interface {
 	GetNameSpaceScopedResources() []schema.GroupVersionResource
 }
 
+type namespaceScope struct {
+	hasSelectiveNamespace bool
+	selectedNamespaceName string
+}
+
 func (a *PlacementAuthorizer) resolveClusterResourcePlacement(ctx context.Context, crp *placementv1beta1.ClusterResourcePlacement) ([]authorizationv1.ResourceAttributes, error) {
 	if crp == nil {
 		return nil, errors.New("cluster resource placement must not be nil")
@@ -46,33 +51,48 @@ func (a *PlacementAuthorizer) resolveClusterResourcePlacement(ctx context.Contex
 	if crp.Namespace != "" {
 		return nil, errors.New("cluster resource placement must not specify a namespace")
 	}
+	namespaceChecks, scope, err := a.resolveNamespaceSelectors(ctx, crp.Spec.ResourceSelectors)
+	if err != nil {
+		return nil, err
+	}
+	resourceChecks, err := a.resolveNonNamespaceSelectors(crp.Spec.ResourceSelectors, scope)
+	if err != nil {
+		return nil, err
+	}
+	return append(namespaceChecks, resourceChecks...), nil
+}
+
+func (a *PlacementAuthorizer) resolveNamespaceSelectors(ctx context.Context, selectors []placementv1beta1.ResourceSelectorTerm) ([]authorizationv1.ResourceAttributes, namespaceScope, error) {
 	var attributes []authorizationv1.ResourceAttributes
-	hasSelectiveNamespace := false
-	selectedNamespaceName := ""
+	var scope namespaceScope
 	namespaceSelectorCount := 0
-	for _, selector := range crp.Spec.ResourceSelectors {
+	for _, selector := range selectors {
 		if selectorGVK(selector) != utils.NamespaceGVK {
 			continue
 		}
 		namespaceSelectorCount++
 		if selector.SelectionScope == placementv1beta1.NamespaceWithResourceSelectors {
-			if hasSelectiveNamespace {
-				return nil, errors.New("NamespaceWithResourceSelectors requires exactly one namespace selector")
+			if scope.hasSelectiveNamespace {
+				return nil, namespaceScope{}, errors.New("NamespaceWithResourceSelectors requires exactly one namespace selector")
 			}
-			hasSelectiveNamespace = true
-			selectedNamespaceName = selector.Name
+			scope.hasSelectiveNamespace = true
+			scope.selectedNamespaceName = selector.Name
 		}
 		checks, err := a.resolveNamespaceSelector(ctx, selector)
 		if err != nil {
-			return nil, err
+			return nil, namespaceScope{}, err
 		}
 		attributes = append(attributes, checks...)
 	}
-	if hasSelectiveNamespace && namespaceSelectorCount != 1 {
-		return nil, errors.New("NamespaceWithResourceSelectors requires exactly one namespace selector")
+	if scope.hasSelectiveNamespace && namespaceSelectorCount != 1 {
+		return nil, namespaceScope{}, errors.New("NamespaceWithResourceSelectors requires exactly one namespace selector")
 	}
+	return attributes, scope, nil
+}
 
-	for _, selector := range crp.Spec.ResourceSelectors {
+func (a *PlacementAuthorizer) resolveNonNamespaceSelectors(selectors []placementv1beta1.ResourceSelectorTerm, scope namespaceScope) ([]authorizationv1.ResourceAttributes, error) {
+	var attributes []authorizationv1.ResourceAttributes
+	for _, selector := range selectors {
 		gvk := selectorGVK(selector)
 		if gvk == utils.NamespaceGVK {
 			continue
@@ -83,10 +103,10 @@ func (a *PlacementAuthorizer) resolveClusterResourcePlacement(ctx context.Contex
 		}
 		namespace := ""
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			if !hasSelectiveNamespace {
+			if !scope.hasSelectiveNamespace {
 				return nil, fmt.Errorf("cluster resource placement requires NamespaceWithResourceSelectors to select namespaced resource %s", gvk)
 			}
-			namespace = selectedNamespaceName
+			namespace = scope.selectedNamespaceName
 		}
 		if !a.resourceEligibilityChecker.AllowsGVK(gvk) {
 			continue

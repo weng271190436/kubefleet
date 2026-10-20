@@ -130,7 +130,10 @@ remain Phase 4.
   required even though RP requests do not use the Namespace dependencies.
   The RP/CRP-specific constructors and RP-specific type alias were removed.
   One fully configured instance can later be injected into both webhooks.
-- CRP resolution first handles Namespace selectors, then other selectors.
+- CRP resolution composes two helpers: Namespace selection returns checks and a
+  `namespaceScope` value; non-Namespace selection consumes that scope and returns
+  its own checks. The outer method only validates the CRP and combines results,
+  without sharing mutable state between the two passes.
   NamespaceOnly, NamespaceWithResources (including default), and
   NamespaceWithResourceSelectors have explicit separate cases. Selective mode
   requires exactly one named active Namespace and cannot mix Namespace selectors.
